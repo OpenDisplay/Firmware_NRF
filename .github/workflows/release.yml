@@ -1,0 +1,130 @@
+name: Build and Release Firmware
+
+on:
+  release:
+    types: [created]
+
+# Explicitly grant the GITHUB_TOKEN permission to modify releases
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install ARM GCC toolchain
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+
+    - name: Cache nRF Command Line Tools
+      id: cache-nrf
+      uses: actions/cache@v4
+      with:
+        path: nrf-command-line-tools_10.23.1_amd64.deb
+        key: ${{ runner.os }}-nrf-tools-10.23.1
+
+    - name: Download nRF Command Line Tools
+      if: steps.cache-nrf.outputs.cache-hit != 'true'
+      run: |
+        wget -q https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/10-23-1/nrf-command-line-tools_10.23.1_amd64.deb
+
+    - name: Install nRF Command Line Tools
+      run: |
+        sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb || sudo apt-get install -f -y
+        sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        # Removed cache: 'pip' because we don't have a requirements.txt file
+
+    - name: Install nrfutil (Python package)
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install nrfutil
+
+    - name: Extract version from release tag
+      id: version
+      run: |
+        TAG_NAME="${{ github.event.release.tag_name }}"
+        # Remove 'v' prefix if present (e.g., v1.2.3 -> 1.2.3)
+        VERSION="${TAG_NAME#v}"
+        # Extract major and minor version (e.g., 1.2.3 -> MAJOR=1, MINOR=2)
+        MAJOR_VERSION=$(echo "$VERSION" | cut -d. -f1)
+        MINOR_VERSION=$(echo "$VERSION" | cut -d. -f2)
+        # If no minor version, default to 0
+        if [ -z "$MINOR_VERSION" ]; then
+          MINOR_VERSION=0
+        fi
+        echo "MAJOR_VERSION=$MAJOR_VERSION" >> $GITHUB_OUTPUT
+        echo "MINOR_VERSION=$MINOR_VERSION" >> $GITHUB_OUTPUT
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: MAJOR=$MAJOR_VERSION, MINOR=$MINOR_VERSION from tag $TAG_NAME"
+
+    - name: Setup private key for bootloader signing
+      env:
+        DFU_KEY: ${{ secrets.DFU_PRIVATE_KEY }}
+      run: |
+        if [ -z "$DFU_KEY" ]; then
+          echo "Warning: DFU_PRIVATE_KEY secret not set. Skipping full bootloader build."
+          echo "HAS_DFU_KEY=false" >> $GITHUB_ENV
+        else
+          mkdir -p tools
+          echo "$DFU_KEY" > tools/priv.pem
+          chmod 600 tools/priv.pem
+          echo "HAS_DFU_KEY=true" >> $GITHUB_ENV
+        fi
+
+    - name: Build application only
+      working-directory: build-nrf52
+      run: |
+        make app \
+          MAJOR_VERSION=${{ steps.version.outputs.MAJOR_VERSION }} \
+          MINOR_VERSION=${{ steps.version.outputs.MINOR_VERSION }}
+        # Safely store the artifact immediately
+        mkdir -p release_artifacts
+        cp _build/EPD-nRF52.hex release_artifacts/EPD-nRF52-v${{ steps.version.outputs.VERSION }}-app.hex || true
+
+    - name: Build softdevice + application
+      working-directory: build-nrf52
+      run: |
+        make sd \
+          MAJOR_VERSION=${{ steps.version.outputs.MAJOR_VERSION }} \
+          MINOR_VERSION=${{ steps.version.outputs.MINOR_VERSION }}
+        # Safely store the artifact immediately
+        mkdir -p release_artifacts
+        cp _build/EPD-nRF52-sd.hex release_artifacts/EPD-nRF52-v${{ steps.version.outputs.VERSION }}-sd.hex || true
+
+    - name: Build full firmware (bootloader + softdevice + application)
+      if: env.HAS_DFU_KEY == 'true'
+      working-directory: build-nrf52
+      run: |
+        make full \
+          MAJOR_VERSION=${{ steps.version.outputs.MAJOR_VERSION }} \
+          MINOR_VERSION=${{ steps.version.outputs.MINOR_VERSION }} \
+          GENERATE_OTA=1 \
+          KEY_FILE=../tools/priv.pem
+        # Safely store the artifacts immediately
+        mkdir -p release_artifacts
+        cp _build/EPD-nRF52-full.hex release_artifacts/EPD-nRF52-v${{ steps.version.outputs.VERSION }}-full.hex || true
+        cp _build/EPD-nRF52-ota.zip release_artifacts/EPD-nRF52-v${{ steps.version.outputs.VERSION }}-ota.zip || true
+          
+    - name: List release artifacts
+      working-directory: build-nrf52
+      run: |
+        echo "Release assets prepared:"
+        ls -lh release_artifacts/ || true
+
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build-nrf52/release_artifacts/*
+        tag_name: ${{ github.event.release.tag_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
