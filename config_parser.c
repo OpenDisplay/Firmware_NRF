@@ -2,11 +2,43 @@
 #include "constants.h"
 #include "config_storage.h"
 #include "encryption.h"
-#include "nrf_log.h"
-#include "nrf_delay.h"
+#include "hal/hal.h"
 #include <string.h>
 
 #define TRANSMISSION_MODE_CLEAR_ON_BOOT (1 << 7)
+
+static uint16_t crc16_ccitt_feed(uint16_t crc, uint8_t b)
+{
+    crc ^= (uint16_t)((uint16_t)b << 8);
+    for (int j = 0; j < 8; j++) {
+        if ((crc & 0x8000U) != 0U) {
+            crc = (uint16_t)(((uint32_t)crc << 1) ^ 0x1021U);
+        } else {
+            crc = (uint16_t)((uint32_t)crc << 1);
+        }
+    }
+    return crc;
+}
+
+static uint16_t config_toolbox_outer_crc16(const uint8_t *data, uint32_t body_len)
+{
+    if (body_len < 2U) {
+        uint16_t crc = 0xFFFFU;
+
+        for (uint32_t i = 0; i < body_len; i++) {
+            crc = crc16_ccitt_feed(crc, data[i]);
+        }
+        return crc;
+    }
+    uint16_t crc = 0xFFFFU;
+
+    crc = crc16_ccitt_feed(crc, 0);
+    crc = crc16_ccitt_feed(crc, 0);
+    for (uint32_t i = 2U; i < body_len; i++) {
+        crc = crc16_ccitt_feed(crc, data[i]);
+    }
+    return crc;
+}
 
 bool parseConfigBytes(uint8_t* configData, uint32_t configLen, struct GlobalConfig* globalConfig) {
     if (globalConfig == NULL || configData == NULL) {
@@ -343,8 +375,7 @@ bool parseConfigBytes(uint8_t* configData, uint32_t configLen, struct GlobalConf
     
     if (configLen >= 2) {
         uint16_t crcGiven = configData[configLen - 2] | (configData[configLen - 1] << 8);
-        uint32_t crcCalculated32 = calculateConfigCRC(configData, configLen - 2);
-        uint16_t crcCalculated = (uint16_t)(crcCalculated32 & 0xFFFF);
+        uint16_t crcCalculated = config_toolbox_outer_crc16(configData, configLen - 2);
         if (crcGiven != crcCalculated) {
             NRF_LOG_WARNING("CRC mismatch: 0x%04X vs 0x%04X", crcGiven, crcCalculated);
         }

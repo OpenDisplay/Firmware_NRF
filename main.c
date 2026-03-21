@@ -30,6 +30,7 @@
 #include "config_parser.h"
 #include "config_storage.h"
 #include "led_control.h"
+#include "boot_screen.h"
 #include "main.h"
 #include "constants.h"
 #include "nrf_drv_gpiote.h"
@@ -836,6 +837,8 @@ int main(void) {
                 NRF_LOG_INFO("CLEAR_ON_BOOT enabled - clearing display");
                 m_epd.epd->drv->clear(m_epd.epd, true);
             }
+            NRF_LOG_INFO("Rendering boot screen (QR + name/key)");
+            (void)boot_screen_render(m_epd.epd, &globalConfig);
             NRF_LOG_INFO("Putting EPD to sleep and uninitializing GPIO for power saving");
             m_epd.epd->drv->sleep(m_epd.epd);
             nrf_delay_ms(EPD_SLEEP_DELAY_MS);

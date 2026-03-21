@@ -42,6 +42,8 @@ SRC_FILES += $(PROJECT_ROOT)/config_parser.c
 SRC_FILES += $(PROJECT_ROOT)/encryption.c
 SRC_FILES += $(PROJECT_ROOT)/led_control.c
 SRC_FILES += $(PROJECT_ROOT)/button_control.c
+SRC_FILES += $(PROJECT_ROOT)/boot_screen.c
+SRC_FILES += $(PROJECT_ROOT)/qr/qrcode.c
 
 # Source files - EPD
 # EPD_config.c removed - legacy config system replaced by config_storage.c
@@ -137,6 +139,7 @@ ASM_FILES += $(SDK_ROOT)/modules/nrfx/mdk/gcc_startup_nrf52811.S
 # Include directories
 INC_FOLDERS += $(PROJECT_ROOT)
 INC_FOLDERS += $(PROJECT_ROOT)/EPD
+INC_FOLDERS += $(PROJECT_ROOT)/qr
 # GUI include folder removed - GUI files not used in current implementation
 # INC_FOLDERS += $(PROJECT_ROOT)/GUI
 INC_FOLDERS += $(SDK_ROOT)

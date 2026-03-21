@@ -2,17 +2,12 @@
 #include "config_storage.h"
 #include "constants.h"
 #include "EPD_service.h"
-#include "nrf_log.h"
+#include "hal/hal.h"
 
 #include "ocrypto_aes_ccm.h"
 #include "ocrypto_aes_cmac.h"
 #include "ocrypto_aes_cbc.h"
 #include "ocrypto_constant_time.h"
-
-#include "nrf_soc.h"
-#include "nrf.h"
-
-#include "nrf_gpio.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -80,11 +75,11 @@ void secure_random(uint8_t* output, size_t len)
 
     while (offset < len) {
         uint8_t to_get = (uint8_t)((len - offset) > 255 ? 255 : (len - offset));
-        uint32_t err = sd_rand_application_vector_get(output + offset, to_get);
+        uint32_t err = hal_rand_get(output + offset, to_get);
         if (err == NRF_SUCCESS) {
             offset += to_get;
         } else {
-            (void)sd_rand_application_bytes_available_get(&available);
+            (void)hal_rand_available(&available);
             if (available == 0) {
                 volatile uint32_t i = 0;
                 while (i < 1000) i++;
@@ -304,7 +299,7 @@ bool handleAuthenticate(uint8_t* data, uint16_t len,
         encryptionSession.server_nonce_time = now;
 
         uint8_t device_id[4];
-        uint32_t device_id_32 = NRF_FICR->DEVICEID[0];
+        uint32_t device_id_32 = hal_deviceid_word0();
         device_id[0] = (uint8_t)(device_id_32 >> 24);
         device_id[1] = (uint8_t)(device_id_32 >> 16);
         device_id[2] = (uint8_t)(device_id_32 >> 8);
@@ -337,7 +332,7 @@ bool handleAuthenticate(uint8_t* data, uint16_t len,
         }
 
         uint8_t device_id[4];
-        uint32_t device_id_32 = NRF_FICR->DEVICEID[0];
+        uint32_t device_id_32 = hal_deviceid_word0();
         device_id[0] = (uint8_t)(device_id_32 >> 24);
         device_id[1] = (uint8_t)(device_id_32 >> 16);
         device_id[2] = (uint8_t)(device_id_32 >> 8);
@@ -562,7 +557,7 @@ void secureEraseConfig(bool reboot_after)
     NRF_LOG_INFO("Config securely erased (zero overwrite)");
     if (reboot_after) {
         NRF_LOG_INFO("Rebooting after secure erase");
-        NVIC_SystemReset();
+        hal_reboot();
     }
 }
 
@@ -572,22 +567,21 @@ void checkResetPin(void)
     if (!(securityConfig.flags & SECURITY_FLAG_RESET_PIN_ENABLED)) return;
     if (securityConfig.reset_pin == 0xFF) return;
     uint32_t pin = securityConfig.reset_pin;
-    uint32_t pull = NRF_GPIO_PIN_NOPULL;
-    if (securityConfig.flags & SECURITY_FLAG_RESET_PIN_PULLUP)
-        pull = NRF_GPIO_PIN_PULLUP;
-    else if (securityConfig.flags & SECURITY_FLAG_RESET_PIN_PULLDOWN)
-        pull = NRF_GPIO_PIN_PULLDOWN;
-    nrf_gpio_cfg_input(pin, (nrf_gpio_pin_pull_t)pull);
+    // Map flags to HAL pull configuration
+    hal_gpio_pull_t p = HAL_GPIO_NOPULL;
+    if (securityConfig.flags & SECURITY_FLAG_RESET_PIN_PULLUP) p = HAL_GPIO_PULLUP;
+    else if (securityConfig.flags & SECURITY_FLAG_RESET_PIN_PULLDOWN) p = HAL_GPIO_PULLDOWN;
+    hal_gpio_cfg_input(pin, p);
     volatile uint32_t d;
     for (d = 0; d < 100000; d++) { /* ~100ms at 16 MHz */ }
-    uint32_t state = nrf_gpio_pin_read(pin);
+    uint32_t state = hal_gpio_read(pin);
     bool trigger = false;
     if (securityConfig.flags & SECURITY_FLAG_RESET_PIN_POLARITY) {
         trigger = (state != 0);
     } else {
         trigger = (state == 0);
     }
-    nrf_gpio_cfg_default(pin);
+    hal_gpio_cfg_default(pin);
     if (trigger) {
         NRF_LOG_WARNING("Reset pin triggered – erasing config and rebooting");
         secureEraseConfig(true);

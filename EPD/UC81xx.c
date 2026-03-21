@@ -75,7 +75,8 @@ void UC81xx_Init(epd_model_t* epd) {
             EPD_Write(0x31, 0x00);
             EPD_Write(UC81xx_BTST, 0xE5, 0x35, 0x3C);
             EPD_Write(UC81xx_CDI, 0x57);
-            EPD_Write(UC81xx_PSR, 0x03, 0x09);  // SHL=0 (fixes horizontal mirror vs working code's drawDirectionRight)
+            EPD_Write(UC81xx_PSR, 0x03, 0x09);
+            EPD_Write(UC81xx_TRES, epd->width & 0xFF, epd->height >> 8, epd->height & 0xFF);
             break;
         case DRV_IC_UCVAR43:
             EPD_Write(0xF8, 0x60, 0x05);

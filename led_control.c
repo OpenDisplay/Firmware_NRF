@@ -3,9 +3,7 @@
 #include "EPD_driver.h"
 #include "structs.h"
 #include "main.h"
-#include "nrf_gpio.h"
-#include "nrf_delay.h"
-#include "nrf_log.h"
+#include "hal/hal.h"
 
 static uint8_t activeLedInstance = LED_INSTANCE_NONE;  // LED instance index for flashing
 static bool ledFlashActive = false;       // Flag to indicate if LED flashing is active
@@ -40,27 +38,27 @@ void flashLed(uint8_t color, uint8_t brightness) {
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 7) : (colorred >= 7));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 7) : (colorgreen >= 7));
         digitalWrite(ledBluePin, invertBlue ? !(colorblue >= 3) : (colorblue >= 3));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 1) : (colorred >= 1));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 1) : (colorgreen >= 1));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 6) : (colorred >= 6));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 6) : (colorgreen >= 6));
         digitalWrite(ledBluePin, invertBlue ? !(colorblue >= 1) : (colorblue >= 1));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 2) : (colorred >= 2));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 2) : (colorgreen >= 2));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 5) : (colorred >= 5));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 5) : (colorgreen >= 5));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 3) : (colorred >= 3));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 3) : (colorgreen >= 3));
         digitalWrite(ledBluePin, invertBlue ? !(colorblue >= 2) : (colorblue >= 2));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? !(colorred >= 4) : (colorred >= 4));
         digitalWrite(ledGreenPin, invertGreen ? !(colorgreen >= 4) : (colorgreen >= 4));
-        nrf_delay_us(LED_PWM_DELAY_US);
+        hal_delay_us(LED_PWM_DELAY_US);
         digitalWrite(ledRedPin, invertRed ? HIGH : LOW);
         digitalWrite(ledGreenPin, invertGreen ? HIGH : LOW);
         digitalWrite(ledBluePin, invertBlue ? HIGH : LOW);
@@ -113,21 +111,21 @@ void ledFlashLogic(void) {
             
             for (uint8_t i = 0; i < loopcnt1; i++) {
                 flashLed(c1, brightness);
-                nrf_delay_ms(loop1delay * loopdelayfactor);
+                hal_delay_ms(loop1delay * loopdelayfactor);
             }
-            nrf_delay_ms(ildelay1 * interloopdelayfactor);
+            hal_delay_ms(ildelay1 * interloopdelayfactor);
             
             for (uint8_t i = 0; i < loopcnt2; i++) {
                 flashLed(c2, brightness);
-                nrf_delay_ms(loop2delay * loopdelayfactor);
+                hal_delay_ms(loop2delay * loopdelayfactor);
             }
-            nrf_delay_ms(ildelay2 * interloopdelayfactor);
+            hal_delay_ms(ildelay2 * interloopdelayfactor);
             
             for (uint8_t i = 0; i < loopcnt3; i++) {
                 flashLed(c3, brightness);
-                nrf_delay_ms(loop3delay * loopdelayfactor);
+                hal_delay_ms(loop3delay * loopdelayfactor);
             }
-            nrf_delay_ms(ildelay3 * interloopdelayfactor);
+            hal_delay_ms(ildelay3 * interloopdelayfactor);
             
             ledFlashPosition++;
         }
