@@ -125,10 +125,8 @@ static float read_chip_temperature(void) {
 }
 
 void updatemsdata(void) {
-    uint16_t msd_cid = globalConfig.manufacturer_data.manufacturer_id;
-    if (msd_cid == 0) {
-        msd_cid = 0x2446;  // Default company ID
-    }
+    //THE msd_cid is STATIC ! 
+    uint16_t msd_cid = msd_cid = 0x2446;
     float chip_temperature = read_chip_temperature();
     uint16_t battery_voltage_mv = EPD_ReadVoltage();
     uint16_t battery_voltage_10mv = battery_voltage_mv / 10;
