@@ -74,6 +74,9 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 
 #define CMD_LED_ACTIVATE        0x0073
 
+#define CMD_DIRECT_WRITE_PARTIAL_START  0x0076  // Not implemented on nRF; client waits for a response
+#define CMD_BUZZER_ACTIVATE             0x0077  // Not implemented on nRF; client waits for a response
+
 #define CMD_REBOOT              0x000F
 #define CMD_FIRMWARE_VERSION    0x0043
 #define CMD_READ_MSD            0x0044
@@ -101,6 +104,7 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 #define RESP_DIRECT_WRITE_REFRESH_SUCCESS 0x73
 #define RESP_DIRECT_WRITE_REFRESH_TIMEOUT 0x74
 #define RESP_DIRECT_WRITE_ERROR      0xFF
+#define RESP_ERR_UNSUPPORTED_CMD     0x01  // NACK error code for commands this firmware does not implement
 #define RESP_LED_ACTIVATE_ACK        0x73
 #define RESP_FIRMWARE_VERSION  0x43
 #define RESP_MSD_READ          0x44
