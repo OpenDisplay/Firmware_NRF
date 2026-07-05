@@ -364,6 +364,40 @@ bool parseConfigBytes(uint8_t* configData, uint32_t configLen, struct GlobalConf
                 }
                 break;
                 
+            // Packet types nRF does not functionally use. Skip past them by their
+            // correct on-wire size so subsequent packets are still parsed, instead
+            // of aborting the whole config on the first one seen.
+            case CONFIG_PKT_TOUCH:   // touch_controller (0x28), 32 bytes
+            case CONFIG_PKT_BUZZER:  // passive_buzzer (0x29), 32 bytes
+            case CONFIG_PKT_NFC:     // nfc_config (0x2A), 32 bytes
+            case CONFIG_PKT_FLASH:   // flash_config (0x2B), 32 bytes
+                if (offset > configLen) {
+                    NRF_LOG_ERROR("Offset overflow before pkt 0x%02X", packetId);
+                    globalConfig->loaded = false;
+                    return false;
+                }
+                if (offset + 32 <= configLen - 2) {
+                    NRF_LOG_DEBUG("Skipping unused pkt 0x%02X (32 bytes)", packetId);
+                    offset += 32;
+                } else {
+                    offset = configLen - 2; // Skip to CRC
+                }
+                break;
+
+            case CONFIG_PKT_DATA_EXTENDED: // data_extended (0x2C), 288 bytes
+                if (offset > configLen) {
+                    NRF_LOG_ERROR("Offset overflow before data_extended");
+                    globalConfig->loaded = false;
+                    return false;
+                }
+                if (offset + 288 <= configLen - 2) {
+                    NRF_LOG_DEBUG("Skipping unused pkt 0x2C (288 bytes)");
+                    offset += 288;
+                } else {
+                    offset = configLen - 2; // Skip to CRC
+                }
+                break;
+
             default:
                 NRF_LOG_WARNING("Unknown pkt 0x%02X @%d", packetId, offset - 2);
                 offset = configLen - 2; // Skip to CRC
