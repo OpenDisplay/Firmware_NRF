@@ -661,6 +661,19 @@ static void dispatch_command(ble_epd_t* p_epd, uint16_t command_16bit,
         case CMD_FIRMWARE_VERSION:
             handle_firmware_version(p_epd);
             break;
+        case CMD_DIRECT_WRITE_PARTIAL_START:
+        case CMD_BUZZER_ACTIVATE:
+            // Commands the client sends and blocks on, but this firmware does
+            // not implement. Reply with the standard 4-byte NACK frame
+            // {0xFF, cmd, error, 0x00} so the client fails fast instead of
+            // waiting for an ACK that never comes and timing out.
+            {
+                NRF_LOG_WARNING("Unsupported command 0x%04X; sending NACK", command_16bit);
+                uint8_t nack[] = {0xFF, (uint8_t)(command_16bit & 0xFF),
+                                  RESP_ERR_UNSUPPORTED_CMD, 0x00};
+                (void)send_response(p_epd, nack, sizeof(nack));
+            }
+            break;
         default:
             NRF_LOG_DEBUG("Unknown command: 0x%04X", command_16bit);
             break;
