@@ -397,6 +397,19 @@ static void handle_direct_write_start(ble_epd_t* p_epd, uint8_t* data, uint16_t 
         send_error_response(p_epd, RESP_DIRECT_WRITE_ERROR);
         return;
     }
+    // nRF only renders BW (color_scheme 0) and BWR (color_scheme 1). For any
+    // other scheme the client streams data whose size this firmware cannot
+    // compute, so it would over/under-run RAM and refresh garbage while still
+    // ACKing success. Reject unsupported schemes up front instead of powering
+    // the panel. Reply with the standard 4-byte NACK frame
+    // {0xFF, cmd, error, 0x00} so the client fails fast.
+    if (p_epd->display_config == NULL || p_epd->display_config->color_scheme > 1) {
+        NRF_LOG_WARNING("DW: unsupported color_scheme; sending NACK");
+        uint8_t nack[] = {0xFF, (uint8_t)(CMD_DIRECT_WRITE_START & 0xFF),
+                          RESP_ERR_UNSUPPORTED_SCHEME, 0x00};
+        (void)send_response(p_epd, nack, sizeof(nack));
+        return;
+    }
     if (directWriteState.active) {
         cleanup_direct_write_state(p_epd);
     }
