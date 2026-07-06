@@ -31,6 +31,8 @@ void incrementNonceCounter(void);
 
 bool verifyNonceReplay(uint8_t* nonce);
 
+void advanceNonceReplay(uint8_t* nonce);
+
 bool decryptCommand(uint8_t* ciphertext, uint16_t ciphertext_len,
                     uint8_t* plaintext, uint16_t* plaintext_len,
                     uint8_t* nonce_full, uint8_t* auth_tag,

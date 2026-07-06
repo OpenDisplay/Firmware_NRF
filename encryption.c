@@ -250,13 +250,27 @@ bool verifyNonceReplay(uint8_t* nonce)
         }
     }
 
+    /* Do NOT advance the replay window here: a forged frame with a fresh
+     * counter passes this check but must not desync the window before its
+     * CCM tag is verified. advanceNonceReplay() is called only after the
+     * tag verifies successfully. */
+    return true;
+}
+
+void advanceNonceReplay(uint8_t* nonce)
+{
+    if (!encryptionSession.authenticated) return;
+
+    uint64_t nonce_counter = 0;
+    for (int i = 0; i < 8; i++) {
+        nonce_counter = (nonce_counter << 8) | nonce[8 + i];
+    }
+
     if (nonce_counter > encryptionSession.last_seen_counter)
         encryptionSession.last_seen_counter = nonce_counter;
 
     encryptionSession.replay_window[encryptionSession.replay_idx] = nonce_counter;
     encryptionSession.replay_idx = (encryptionSession.replay_idx + 1) % 64;
-
-    return true;
 }
 
 bool handleAuthenticate(uint8_t* data, uint16_t len,
@@ -482,6 +496,9 @@ bool decryptCommand(uint8_t* ciphertext, uint16_t ciphertext_len,
             memcpy(plaintext, decrypted_with_length + 1, payload_length);
         }
         *plaintext_len = payload_length;
+        /* Tag verified: only now advance the replay window so a forged
+         * frame (bad tag) cannot desync it. */
+        advanceNonceReplay(nonce_full);
         encryptionSession.integrity_failures = 0;
         updateEncryptionSessionActivity();
         memset(decrypted_with_length, 0, sizeof(decrypted_with_length));
