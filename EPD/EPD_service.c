@@ -115,7 +115,7 @@ static uint32_t send_response(ble_epd_t* p_epd, uint8_t* response, uint16_t len)
     }
 
     if (isAuthenticated()) {
-        static uint8_t enc_buf[512];
+        static uint8_t enc_buf[MAX_ENCRYPTED_PACKET_SIZE];
         uint16_t enc_len = 0;
         uint8_t nonce[16];
         uint8_t tag[12];
@@ -160,7 +160,13 @@ static void handle_read_config(ble_epd_t* p_epd) {
     uint32_t remaining = configLen;
     uint32_t offset = 0;
     uint16_t chunkNumber = 0;
-    const uint16_t maxChunks = 10;
+    // Cap the number of read chunks so a full MAX_CONFIG_SIZE config is always
+    // readable. The worst-case usable payload per chunk is
+    // (MAX_RESPONSE_DATA_SIZE - 6) bytes: a 4-byte header plus, on chunk 0, a
+    // 2-byte total-length prefix. Deriving the cap from MAX_CONFIG_SIZE keeps it
+    // correct if either constant changes.
+    const uint16_t maxChunks =
+        (MAX_CONFIG_SIZE + (MAX_RESPONSE_DATA_SIZE - 6) - 1) / (MAX_RESPONSE_DATA_SIZE - 6);
     
     while (remaining > 0 && chunkNumber < maxChunks) {
         uint16_t responseLen = 0;
@@ -218,6 +224,12 @@ static void handle_write_config(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
         chunkedWriteState.receivedChunks = 0;
         if (len >= CONFIG_CHUNK_SIZE_WITH_PREFIX) {
             chunkedWriteState.totalSize = data[0] | (data[1] << 8);
+            if (chunkedWriteState.totalSize == 0 || chunkedWriteState.totalSize > MAX_CONFIG_SIZE) {
+                chunkedWriteState.active = false;
+                uint8_t errorResponse[] = {0xFF, RESP_CONFIG_WRITE, 0x00, 0x00};
+                (void)send_response(p_epd, errorResponse, sizeof(errorResponse));
+                return;
+            }
             chunkedWriteState.expectedChunks = (chunkedWriteState.totalSize + CONFIG_CHUNK_SIZE - 1) / CONFIG_CHUNK_SIZE;
             uint16_t chunkDataSize = ((len - 2) < CONFIG_CHUNK_SIZE) ? (len - 2) : CONFIG_CHUNK_SIZE;
             memcpy(chunkedWriteState.buffer, data + 2, chunkDataSize);
@@ -512,6 +524,11 @@ static void handle_direct_write_end(ble_epd_t* p_epd, uint8_t* data, uint16_t le
     }
     uint8_t ackResponse[] = {0x00, RESP_DIRECT_WRITE_END_ACK};
     (void)send_response(p_epd, ackResponse, sizeof(ackResponse));
+    // NOTE: Silabs honors the END refresh-mode byte (payload[0]==1 -> fast).
+    // The nRF EPD driver only exposes a single full-refresh entry point
+    // (epd_driver_t.refresh takes no mode argument; SSD16xx_Refresh/UC81xx_Refresh
+    // always do a full refresh with no fast LUT), so the refresh-mode byte cannot
+    // be honored here without a driver API change. Always full refresh.
     if (p_epd->epd->ic == DRV_IC_UC8176 || p_epd->epd->ic == DRV_IC_UC8179) {
         EPD_WriteCmd(UC81xx_PTOUT);
             }
