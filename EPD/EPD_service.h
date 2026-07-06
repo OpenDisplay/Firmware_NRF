@@ -101,6 +101,7 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 #define RESP_DIRECT_WRITE_REFRESH_SUCCESS 0x73
 #define RESP_DIRECT_WRITE_REFRESH_TIMEOUT 0x74
 #define RESP_DIRECT_WRITE_ERROR      0xFF
+#define RESP_ERR_UNSUPPORTED_SCHEME  0x02  // NACK error code for color schemes this firmware cannot render
 #define RESP_LED_ACTIVATE_ACK        0x73
 #define RESP_FIRMWARE_VERSION  0x43
 #define RESP_MSD_READ          0x44
