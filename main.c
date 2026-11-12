@@ -679,6 +679,10 @@ static void power_management_init(void) {
 #define BOOTLOADER_DFU_START 0xB1
 #endif
 
+void system_reset(void) {
+    NVIC_SystemReset();
+}
+
 void enter_dfu_mode(void) {
     if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
         sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);

@@ -230,9 +230,9 @@ static void config_reload(void)
 
 static void config_store(uint8_t op, uint32_t len)
 {
-    uint8_t err = od_nrf_config_check(g_od_cfg_ws.buffer, len);
+    uint8_t err = OD_ERR_CONFIG_WRITE_FAILED;
 
-    if (err == 0u) {
+    if (od_nrf_config_check(g_od_cfg_ws.buffer, len, &err)) {
         const enum od_config_store_result r =
             od_config_store_save(&g_od_cfg_ws, sizeof g_od_cfg_ws, g_od_cfg_ws.buffer, len);
         if (r == OD_CONFIG_STORE_OK) {
@@ -507,7 +507,7 @@ static void dispatch_command(uint16_t cmd, const uint8_t *body, uint16_t len)
     }
     case CMD_REBOOT:
         nrf_delay_ms(100);
-        NVIC_SystemReset();
+        system_reset();
         break;
     case CMD_ENTER_DFU:
         reply2(RESP_ACK, RESP_ENTER_DFU);

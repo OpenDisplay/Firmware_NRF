@@ -31,8 +31,9 @@ extern struct od_config_asm g_od_cfg_ws;
 
 /* Loads the stored config into `g` and binds display 0. false = no usable config. */
 bool od_nrf_config_load(struct GlobalConfig *g);
-/* 0 = acceptable; else the 3.0 error byte for [FF][41|42][err][00]. */
-uint8_t od_nrf_config_check(const uint8_t *blob, uint32_t len);
+/* true = acceptable. false: *err is the 3.0 error byte for [FF][41|42][err][00] (0x00, the
+ * generic CONFIG_WRITE_FAILED, is a valid error, so it cannot double as "accepted"). */
+bool od_nrf_config_check(const uint8_t *blob, uint32_t len, uint8_t *err);
 /* Parse a blob into `g` (the 3.0 TLV walk; 0x80+ packets are skipped by their length). */
 bool od_nrf_config_parse(const uint8_t *blob, uint32_t len, struct GlobalConfig *g);
 

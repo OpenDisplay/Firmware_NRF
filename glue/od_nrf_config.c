@@ -149,24 +149,26 @@ static bool check_cb(void *ctx, uint8_t id, od_span_t body)
     return true;
 }
 
-uint8_t od_nrf_config_check(const uint8_t *blob, uint32_t len)
+bool od_nrf_config_check(const uint8_t *blob, uint32_t len, uint8_t *err)
 {
     struct check c = { blob, OD_CFG_TLV_HEADER_LEN, false };
     uint8_t unknown = 0;
 
+    *err = OD_ERR_CONFIG_WRITE_FAILED;
     if (blob == NULL || len > OD_CONFIG_MAX_SIZE ||
         len < OD_CFG_TLV_HEADER_LEN + OD_CFG_TLV_CRC_LEN) {
-        return OD_ERR_CONFIG_WRITE_FAILED;
+        return false;
     }
     if (od_config_tlv_walk(od_span_make(blob, len), check_cb, &c, NULL, &unknown) !=
             OD_CFG_TLV_OK ||
         unknown != 0u || c.last_end != len - OD_CFG_TLV_CRC_LEN) {
-        return OD_ERR_CONFIG_WRITE_FAILED;
+        return false;
     }
     if (c.secret) {
-        return OD_ERR_CONFIG_SECRET_NEEDS_CLAIM;
+        *err = OD_ERR_CONFIG_SECRET_NEEDS_CLAIM;
+        return false;
     }
-    return 0u;
+    return true;
 }
 
 /* ---- READ_IDENT (0x0046) ----------------------------------------------------------------------
