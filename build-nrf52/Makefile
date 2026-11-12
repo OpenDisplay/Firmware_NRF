@@ -39,7 +39,6 @@ endif
 SRC_FILES += $(PROJECT_ROOT)/main.c
 SRC_FILES += $(PROJECT_ROOT)/config_storage.c
 SRC_FILES += $(PROJECT_ROOT)/config_parser.c
-SRC_FILES += $(PROJECT_ROOT)/encryption.c
 SRC_FILES += $(PROJECT_ROOT)/led_control.c
 SRC_FILES += $(PROJECT_ROOT)/button_control.c
 SRC_FILES += $(PROJECT_ROOT)/boot_screen.c
@@ -186,7 +185,6 @@ INC_FOLDERS += $(SDK_ROOT)/modules/nrfx
 INC_FOLDERS += $(SDK_ROOT)/modules/nrfx/mdk
 INC_FOLDERS += $(SDK_ROOT)/modules/nrfx/drivers/include
 INC_FOLDERS += $(SDK_ROOT)/modules/nrfx/hal
-INC_FOLDERS += $(SDK_ROOT)/external/nrf_oberon/include
 
 # Compiler defines
 CFLAGS += -DAPP_TIMER_V2
@@ -262,9 +260,6 @@ LDFLAGS += -Wl,--undefined=main
 LDFLAGS += -Wl,--undefined=SystemInit
 # Disable -flto as it can cause issues with startup/initialization
 # LDFLAGS += -flto
-# Oberon crypto library (soft-float, Cortex-M4 for nRF52811)
-OBERON_LIB_DIR = $(SDK_ROOT)/external/nrf_oberon/lib/cortex-m4/soft-float
-LDFLAGS += -L$(OBERON_LIB_DIR)
 LDFLAGS += -Wl,--start-group -lc -lnosys -lm -Wl,--end-group
 
 # Object files - convert source paths to object paths
@@ -322,10 +317,10 @@ $(OUTPUT_DIRECTORY)/sdk/%.o: $(SDK_ROOT)/%.S | $(OUTPUT_DIRECTORY)
 	@mkdir -p $(dir $@)
 	@$(CC) $(ASMFLAGS) -c $< -o $@
 
-# Link (Oberon library must come after OBJ_FILES so linker resolves symbols)
+# Link
 $(OUTPUT_DIRECTORY)/$(TARGET).out: $(OBJ_FILES) | $(OUTPUT_DIRECTORY)
 	@echo "Linking: $@"
-	@$(CC) $(LDFLAGS) -o $@ $(OBJ_FILES) -loberon_3.0.8
+	@$(CC) $(LDFLAGS) -o $@ $(OBJ_FILES)
 	@$(SIZE) $@
 
 # Create hex file

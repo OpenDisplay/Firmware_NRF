@@ -1,7 +1,6 @@
 #include "config_parser.h"
 #include "constants.h"
 #include "config_storage.h"
-#include "encryption.h"
 #include "hal/hal.h"
 #include <string.h>
 
@@ -282,17 +281,9 @@ bool parseConfigBytes(uint8_t* configData, uint32_t configLen, struct GlobalConf
                     globalConfig->loaded = false;
                     return false;
                 }
+                /* Parsed for its size only: this build has no security module. */
                 if (offset + sizeof(struct SecurityConfig) <= configLen - 2) {
-                    if (isEncryptionEnabled() && !isAuthenticated()) {
-                        globalConfig->loaded = false;
-                        return false;
-                    }
-                    memcpy(&securityConfig, &configData[offset], sizeof(struct SecurityConfig));
                     offset += sizeof(struct SecurityConfig);
-                    if (offset > configLen) {
-                        globalConfig->loaded = false;
-                        return false;
-                    }
                 } else {
                     offset = configLen - 2;
                 }

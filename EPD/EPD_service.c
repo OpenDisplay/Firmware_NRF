@@ -5,7 +5,6 @@
 #include "ble_srv_common.h"
 #include "config_storage.h"
 #include "constants.h"
-#include "encryption.h"
 #include "led_control.h"
 #include "main.h"
 #include "nrf_delay.h"
@@ -41,7 +40,6 @@ static uint32_t direct_write_packet_count = 0;
 
 static uint32_t send_response_raw(ble_epd_t* p_epd, uint8_t* response, uint16_t len);
 static uint32_t send_response(ble_epd_t* p_epd, uint8_t* response, uint16_t len);
-static uint32_t send_response_unencrypted(ble_epd_t* p_epd, uint8_t* response, uint16_t len);
 static void handle_read_config(ble_epd_t* p_epd);
 static void handle_write_config(ble_epd_t* p_epd, uint8_t* data, uint16_t len);
 static void handle_write_config_chunk(ble_epd_t* p_epd, uint8_t* data, uint16_t len);
@@ -49,12 +47,11 @@ static void handle_direct_write_start(ble_epd_t* p_epd, uint8_t* data, uint16_t 
 static void handle_direct_write_data(ble_epd_t* p_epd, uint8_t* data, uint16_t len);
 static void handle_direct_write_end(ble_epd_t* p_epd, uint8_t* data, uint16_t len);
 static void handle_led_activate(ble_epd_t* p_epd, uint8_t* data, uint16_t len);
-static void handle_authenticate(ble_epd_t* p_epd, uint8_t* data, uint16_t len);
+static void handle_authenticate(ble_epd_t* p_epd);
 static void handle_deep_sleep(ble_epd_t* p_epd);
 static void cleanup_direct_write_state(ble_epd_t* p_epd);
 
 static void send_error_response(ble_epd_t* p_epd, uint8_t error_code);
-static void send_auth_required_response(ble_epd_t* p_epd, uint8_t cmd_byte);
 static void epd_sleep_and_uninit(ble_epd_t* p_epd);
 static void invert_data_buffer(uint8_t* dest, const uint8_t* src, uint16_t len);
 static void epd_reset_window(ble_epd_t* p_epd);
@@ -69,9 +66,6 @@ static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
 static void on_disconnect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     UNUSED_PARAMETER(p_ble_evt);
     p_epd->conn_handle = BLE_CONN_HANDLE_INVALID;
-    if (isAuthenticated()) {
-        clearEncryptionSession();
-    }
     if (directWriteState.active && p_epd->epd && p_epd->epd->drv) {
         epd_sleep_and_uninit(p_epd);
         cleanup_direct_write_state(p_epd);
@@ -91,39 +85,7 @@ static uint32_t send_response_raw(ble_epd_t* p_epd, uint8_t* response, uint16_t 
     return ble_epd_string_send(p_epd, response, len);
 }
 
-static uint32_t send_response_unencrypted(ble_epd_t* p_epd, uint8_t* response, uint16_t len) {
-    return send_response_raw(p_epd, response, len);
-}
-
 static uint32_t send_response(ble_epd_t* p_epd, uint8_t* response, uint16_t len) {
-    if (len >= 2) {
-        uint8_t status = response[0];
-        uint8_t cmd    = response[1];
-        if (status == RESP_AUTH_REQUIRED || status == 0xFF) {
-            return send_response_unencrypted(p_epd, response, len);
-        }
-        if (cmd == RESP_AUTHENTICATE || cmd == RESP_FIRMWARE_VERSION || cmd == RESP_MSD_READ) {
-            return send_response_unencrypted(p_epd, response, len);
-        }
-    }
-
-    if (isAuthenticated()) {
-        static uint8_t enc_buf[512];
-        uint16_t enc_len = 0;
-        uint8_t nonce[16];
-        uint8_t tag[12];
-
-        if (encryptResponse(response, len, enc_buf, &enc_len, nonce, tag)) {
-            ret_code_t result = send_response_raw(p_epd, enc_buf, enc_len);
-            memset(enc_buf, 0, sizeof(enc_buf));
-            return result;
-        } else {
-            memset(enc_buf, 0, sizeof(enc_buf));
-            uint8_t err[3] = { 0x00, response[1], 0xFF };
-            return send_response_unencrypted(p_epd, err, 3);
-    }
-    }
-
     return send_response_raw(p_epd, response, len);
 }
 
@@ -189,14 +151,6 @@ static void handle_read_config(ble_epd_t* p_epd) {
 static void handle_write_config(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
     if (len == 0) {
         return;
-    }
-    if (isEncryptionEnabled() && !isAuthenticated()) {
-        if (securityConfig.flags & SECURITY_FLAG_REWRITE_ALLOWED) {
-            secureEraseConfig(false);
-        } else {
-            send_auth_required_response(p_epd, RESP_CONFIG_WRITE);
-            return;
-        }
     }
     if (len > CONFIG_CHUNK_SIZE) {
         chunkedWriteState.active = true;
@@ -310,15 +264,6 @@ static void handle_write_config_chunk(ble_epd_t* p_epd, uint8_t* data, uint16_t 
     chunkedWriteState.receivedSize += len;
     chunkedWriteState.receivedChunks++;
     if (chunkedWriteState.receivedChunks >= chunkedWriteState.expectedChunks) {
-        if (isEncryptionEnabled() && !isAuthenticated()) {
-            if (!(securityConfig.flags & SECURITY_FLAG_REWRITE_ALLOWED)) {
-                chunkedWriteState.active = false;
-                chunkedWriteState.receivedSize = 0;
-                chunkedWriteState.receivedChunks = 0;
-                send_auth_required_response(p_epd, RESP_CONFIG_CHUNK);
-                return;
-            }
-        }
         if (saveConfig(chunkedWriteState.buffer, chunkedWriteState.receivedSize)) {
             uint8_t successResponse[] = {0x00, RESP_CONFIG_CHUNK, 0x00, 0x00};
             (void)send_response(p_epd, successResponse, sizeof(successResponse));
@@ -340,18 +285,11 @@ static void send_error_response(ble_epd_t* p_epd, uint8_t error_code) {
     (void)send_response(p_epd, errorResponse, sizeof(errorResponse));
 }
 
-static void send_auth_required_response(ble_epd_t* p_epd, uint8_t cmd_byte) {
-    uint8_t resp[] = { 0x00, cmd_byte, RESP_AUTH_REQUIRED };
-    (void)send_response_unencrypted(p_epd, resp, sizeof(resp));
-}
-
-static void handle_authenticate(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
-    static uint8_t auth_response[24];
-    uint16_t auth_response_len = 0;
-    handleAuthenticate(data, len, auth_response, &auth_response_len);
-    if (auth_response_len > 0) {
-        (void)send_response_unencrypted(p_epd, auth_response, auth_response_len);
-    }
+/* AUTHENTICATE (v1): this build has no security module. The 3.0 answer for such a device is
+ * NOT_CONFIG, so an old client that tries to authenticate learns there is nothing to unlock. */
+static void handle_authenticate(ble_epd_t* p_epd) {
+    uint8_t resp[] = {0x00, RESP_AUTHENTICATE, AUTH_STATUS_NOT_CONFIG};
+    (void)send_response(p_epd, resp, sizeof(resp));
 }
 
 static void epd_sleep_and_uninit(ble_epd_t* p_epd) {
@@ -636,76 +574,11 @@ static void dispatch_command(ble_epd_t* p_epd, uint16_t command_16bit,
 }
 
 static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) {
-    if (p_data == NULL || length <= 0) return;
-
-    if (length < 2) {
-        return;
-    }
-
-    if (length > MAX_BLE_PACKET_SIZE) {
-        uint8_t err[] = { 0xFF, p_data[1], 0xFE };  // Error response with packet too large indicator
-        (void)send_response_unencrypted(p_epd, err, sizeof(err));
-        return;
-    }
+    if (p_data == NULL || length < 2) return;
 
     uint16_t command_16bit = (p_data[0] << 8) | p_data[1];
-
-    
     if (command_16bit == CMD_AUTHENTICATE) {
-        handle_authenticate(p_epd, &p_data[2], length - 2);
-        return;
-    }
-
-    if (!isEncryptionEnabled()) {
-        if (length > MAX_UNENCRYPTED_PACKET_SIZE) {
-            uint8_t err[] = { 0xFF, p_data[1], 0xFE };
-            (void)send_response_unencrypted(p_epd, err, sizeof(err));
-            return;
-        }
-        dispatch_command(p_epd, command_16bit, &p_data[2], length - 2);
-        return;
-    }
-    if (length >= 31) {
-        if (length < BLE_CMD_HEADER_SIZE + ENCRYPTION_NONCE_SIZE + ENCRYPTION_TAG_SIZE) {
-            uint8_t err[] = { 0xFF, p_data[1], 0xFE };
-            (void)send_response_unencrypted(p_epd, err, sizeof(err));
-            return;
-        }
-        uint8_t nonce[16];
-        uint8_t tag[12];
-        memcpy(nonce, p_data + 2, 16);
-        uint16_t enc_data_len = length - 2 - 16 - 12;
-        if (enc_data_len > MAX_ENCRYPTED_CIPHERTEXT_LEN) {
-            uint8_t err[] = { 0xFF, p_data[1], 0xFE };
-            (void)send_response_unencrypted(p_epd, err, sizeof(err));
-            return;
-        }
-        uint8_t* enc_data = p_data + 2 + 16;
-        memcpy(tag, p_data + length - 12, 12);
-        if (!isAuthenticated()) {
-            send_auth_required_response(p_epd, p_data[1]);
-            return;
-        }
-        static uint8_t plaintext[512];
-        uint16_t plaintext_len = 0;
-        if (decryptCommand(enc_data, enc_data_len, plaintext, &plaintext_len,
-                           nonce, tag, command_16bit)) {
-            dispatch_command(p_epd, command_16bit, plaintext, plaintext_len);
-            memset(plaintext, 0, sizeof(plaintext));
-        } else {
-            uint8_t err[] = { 0x00, p_data[1], 0xFF };
-            (void)send_response_unencrypted(p_epd, err, sizeof(err));
-            memset(plaintext, 0, sizeof(plaintext));
-        }
-        return;
-    }
-    if (!isAuthenticated()) {
-        send_auth_required_response(p_epd, p_data[1]);
-        return;
-    }
-    if (length > MAX_UNENCRYPTED_PACKET_SIZE) {
-        uint8_t err[] = { 0xFF, p_data[1], 0xFE };
-        (void)send_response_unencrypted(p_epd, err, sizeof(err));
+        handle_authenticate(p_epd);
         return;
     }
     dispatch_command(p_epd, command_16bit, &p_data[2], length - 2);

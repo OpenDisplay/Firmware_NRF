@@ -38,7 +38,6 @@
 #include "nrf_log.h"
 #include "nrf_power.h"
 #include "nrf_pwr_mgmt.h"
-#include "encryption.h"
 #include "structs.h"
 
 #define CENTRAL_LINK_COUNT              0                                               /**< Number of central links used by the application. When changing this number remember to adjust the RAM settings*/
@@ -218,11 +217,6 @@ static void advertising_config_get(ble_adv_modes_config_t* p_config) {
 static void ble_dfu_evt_handler(ble_dfu_buttonless_evt_type_t event) {
     switch (event) {
         case BLE_DFU_EVT_BOOTLOADER_ENTER_PREPARE: {
-            if (isEncryptionEnabled() && !isAuthenticated()) {
-                nrf_delay_ms(100);
-                NVIC_SystemReset();
-                return;
-            }
             ble_adv_modes_config_t config;
             advertising_config_get(&config);
             config.ble_adv_on_disconnect_disabled = true;
@@ -322,9 +316,6 @@ void enter_deep_sleep(void) {
     nrf_delay_ms(100);
     ble_epd_sleep_prepare(&m_epd);
     nrf_delay_ms(100);
-    if (isAuthenticated()) {
-        clearEncryptionSession();
-    }
     NVIC->ICER[0] = 0xFFFFFFFF;
     NVIC->ICPR[0] = 0xFFFFFFFF;
 #if defined(__NRF_NVIC_ISER_COUNT) && __NRF_NVIC_ISER_COUNT == 2
@@ -749,8 +740,6 @@ int main(void) {
     bool config_loaded = loadGlobalConfig(&globalConfig);
     if (!config_loaded) {
     }
-    encryption_init();
-    checkResetPin();
     updatemsdata();
     led_init();
     button_init();

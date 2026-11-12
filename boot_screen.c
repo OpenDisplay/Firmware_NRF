@@ -5,7 +5,6 @@
 #include <stdio.h>
 
 #include "constants.h"
-#include "encryption.h" // securityConfig
 #include "hal/hal.h"
 
 #include "qr/qrcode.h"
@@ -163,11 +162,6 @@ bool boot_screen_render(epd_model_t* epd, const struct GlobalConfig* cfg) {
     payload[4] = (uint8_t)(last3 & 0xFF);
 
     uint8_t key[16] = {0};
-    if (securityConfig.flags & SECURITY_FLAG_SHOW_KEY_ON_SCREEN) {
-        memcpy(key, securityConfig.encryption_key, 16);
-    } else {
-        memset(key, 0, 16);
-    }
     memcpy(&payload[5], key, 16);
 
     uint16_t mfg = cfg->manufacturer_data.manufacturer_id;

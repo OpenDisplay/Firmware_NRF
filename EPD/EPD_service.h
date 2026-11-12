@@ -113,13 +113,6 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 #define MAX_CONFIG_CHUNKS 20
 #define MAX_RESPONSE_DATA_SIZE 100
 
-#define MAX_ENCRYPTED_CIPHERTEXT_LEN 512  /**< Maximum ciphertext length in bytes */
-#define BLE_CMD_HEADER_SIZE 2              /**< Command header size (2 bytes) */
-#define ENCRYPTION_NONCE_SIZE 16           /**< Nonce size for encryption (16 bytes) */
-#define ENCRYPTION_TAG_SIZE 12             /**< Authentication tag size (12 bytes) */
-#define MAX_ENCRYPTED_PACKET_SIZE (BLE_CMD_HEADER_SIZE + ENCRYPTION_NONCE_SIZE + MAX_ENCRYPTED_CIPHERTEXT_LEN + ENCRYPTION_TAG_SIZE)  /**< Maximum encrypted packet: 2 + 16 + 512 + 12 = 542 bytes */
-#define MAX_UNENCRYPTED_PACKET_SIZE 514    /**< Maximum unencrypted packet: 2 (cmd) + 512 (payload) = 514 bytes */
-#define MAX_BLE_PACKET_SIZE MAX_ENCRYPTED_PACKET_SIZE  /**< Overall maximum BLE packet size */
 
 #if defined(S112)
 #define BLE_EPD_MAX_DATA_LEN (NRF_SDH_BLE_GATT_MAX_MTU_SIZE - 3)
