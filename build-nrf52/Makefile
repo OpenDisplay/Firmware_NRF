@@ -367,6 +367,11 @@ MINOR_VERSION ?= 0
 # Or use hex format like 0x19 (25 decimal) for legacy compatibility
 # Note: nrfutil expects a decimal number, not hex
 APP_VERSION ?= $(shell echo $$(( $(MAJOR_VERSION) * 100 + $(MINOR_VERSION) )))
+# The version the bootloader compares (init packet fw_version, settings app_version). It stays
+# at the 2.x value: if the bootloader prevents downgrades, a unit whose settings say 300 would
+# refuse every 2.x package (222) afterwards, and the 3.x -> 2.x path would be gone. It is not
+# the version FIRMWARE_VERSION reports (MAJOR_VERSION.MINOR_VERSION).
+DFU_APP_VERSION ?= 222
 BOOTLOADER_VERSION ?= 1
 BL_SETTINGS_VERSION ?= 1
 DFU_HW_VERSION ?= 52
@@ -432,7 +437,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 				--key-file $(KEY_FILE) \
 				--hw-version $(DFU_HW_VERSION) \
 				--sd-req $(DFU_SD_REQ) \
-				--application-version 222 \
+				--application-version $(DFU_APP_VERSION) \
 				$(DFU_OTA_ZIP); \
 		else \
 			$(NRFUTIL) pkg generate \
@@ -440,7 +445,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 				--key-file $(KEY_FILE) \
 				--hw-version $(DFU_HW_VERSION) \
 				--sd-req $(DFU_SD_REQ) \
-				--application-version 222 \
+				--application-version $(DFU_APP_VERSION) \
 				$(DFU_OTA_ZIP); \
 		fi; \
 	else \
@@ -453,7 +458,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 			--family $(DFU_FAMILY) \
 			--application $(OUTPUT_DIRECTORY)/$(TARGET).hex \
 			--softdevice $(SOFTDEVICE_HEX) \
-			--application-version $(APP_VERSION) \
+			--application-version $(DFU_APP_VERSION) \
 			--bootloader-version $(BOOTLOADER_VERSION) \
 			--bl-settings-version $(BL_SETTINGS_VERSION) \
 			--key-file $(KEY_FILE) \
@@ -465,7 +470,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 			--family $(DFU_FAMILY) \
 			--application $(OUTPUT_DIRECTORY)/$(TARGET).hex \
 			--softdevice $(SOFTDEVICE_HEX) \
-			--application-version $(APP_VERSION) \
+			--application-version $(DFU_APP_VERSION) \
 			--bootloader-version $(BOOTLOADER_VERSION) \
 			--bl-settings-version $(BL_SETTINGS_VERSION) \
 			--key-file $(KEY_FILE) \
