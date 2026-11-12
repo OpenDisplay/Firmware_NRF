@@ -79,14 +79,11 @@ void SSD16xx_Init(epd_model_t* epd) {
 }
 
 static void SSD16xx_Refresh(epd_model_t* epd) {
-    EPD_DEBUG("refresh begin");
-    EPD_DEBUG("temperature: %d", SSD16xx_ReadTemp(epd));
     uint8_t ctrl1 = epd->color == COLOR_BWR ? 0x08 : 0x48;
     if (epd->id == SSD1619_013_BW || epd->id == SSD1619_013_BWR) ctrl1 |= 0x80;
     EPD_Write(SSD16xx_DISP_CTRL1, ctrl1, 0x00);
     SSD16xx_Update(0xF7);
     SSD16xx_WaitBusy(UINT16_MAX);
-    EPD_DEBUG("refresh end");
     SSD16xx_SetWindow(epd, 0, 0, epd->width, epd->height);
 }
 

@@ -36,14 +36,10 @@
 #include "nrf_drv_gpiote.h"
 #include "nrf_drv_wdt.h"
 #include "nrf_log.h"
-#include "nrf_log_ctrl.h"
 #include "nrf_power.h"
 #include "nrf_pwr_mgmt.h"
 #include "encryption.h"
 #include "structs.h"
-#if defined(S112)
-#include "nrf_log_default_backends.h"
-#endif
 
 #define CENTRAL_LINK_COUNT              0                                               /**< Number of central links used by the application. When changing this number remember to adjust the RAM settings*/
 #define PERIPHERAL_LINK_COUNT           1                                               /**< Number of peripheral links used by the application. When changing this number remember to adjust the RAM settings*/
@@ -197,7 +193,6 @@ void opendisplay_comm_pump(void) {
 #else
     app_sched_execute();
 #endif
-    (void)NRF_LOG_PROCESS();
 }
 
 #if defined(S112)
@@ -224,13 +219,10 @@ static void ble_dfu_evt_handler(ble_dfu_buttonless_evt_type_t event) {
     switch (event) {
         case BLE_DFU_EVT_BOOTLOADER_ENTER_PREPARE: {
             if (isEncryptionEnabled() && !isAuthenticated()) {
-                NRF_LOG_WARNING("DFU blocked: encryption enabled but not authenticated");
-                NRF_LOG_FINAL_FLUSH();
                 nrf_delay_ms(100);
                 NVIC_SystemReset();
                 return;
             }
-            NRF_LOG_INFO("Device is preparing to enter bootloader mode.");
             ble_adv_modes_config_t config;
             advertising_config_get(&config);
             config.ble_adv_on_disconnect_disabled = true;
@@ -245,21 +237,17 @@ static void ble_dfu_evt_handler(ble_dfu_buttonless_evt_type_t event) {
         }
 
         case BLE_DFU_EVT_BOOTLOADER_ENTER:
-            NRF_LOG_INFO("Device will enter bootloader mode.");
             break;
 
         case BLE_DFU_EVT_BOOTLOADER_ENTER_FAILED:
-            NRF_LOG_ERROR("Request to enter bootloader mode failed asynchroneously.");
             APP_ERROR_CHECK(false);
             break;
 
         case BLE_DFU_EVT_RESPONSE_SEND_ERROR:
-            NRF_LOG_ERROR("Request to send a response to client failed.");
             APP_ERROR_CHECK(false);
             break;
 
         default:
-            NRF_LOG_ERROR("Unknown event from ble_dfu_buttonless.");
             break;
     }
 }
@@ -267,18 +255,14 @@ static void ble_dfu_evt_handler(ble_dfu_buttonless_evt_type_t event) {
 static void ble_dfu_evt_handler(ble_dfu_t* p_dfu, ble_dfu_evt_t* p_evt) {
     switch (p_evt->type) {
         case BLE_DFU_EVT_INDICATION_DISABLED:
-            NRF_LOG_INFO("Indication for BLE_DFU is disabled\r\n");
             break;
 
         case BLE_DFU_EVT_INDICATION_ENABLED:
-            NRF_LOG_INFO("Indication for BLE_DFU is enabled\r\n");
             break;
 
         case BLE_DFU_EVT_ENTERING_BOOTLOADER:
-            NRF_LOG_INFO("Device is entering bootloader mode!\r\n");
             break;
         default:
-            NRF_LOG_INFO("Unknown event from ble_dfu\r\n");
             break;
     }
 }
@@ -308,8 +292,6 @@ static void application_timers_start(void) {
 }
 
 void sleep_mode_enter(void) {
-    NRF_LOG_DEBUG("Entering deep sleep mode\n");
-    NRF_LOG_FINAL_FLUSH();
     nrf_delay_ms(100);
 
     ble_epd_sleep_prepare(&m_epd);
@@ -317,19 +299,13 @@ void sleep_mode_enter(void) {
 }
 
 void enter_deep_sleep(void) {
-    NRF_LOG_INFO("=== ENTERING DEEP SLEEP (System OFF) ===");
-    NRF_LOG_INFO("Device will enter lowest power state");
-    NRF_LOG_INFO("Only power cycle or reset pin can wake the device");
-    NRF_LOG_FINAL_FLUSH();
     if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
-        NRF_LOG_INFO("Disconnecting BLE...");
         ret_code_t err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
         if (err_code == NRF_SUCCESS) {
             nrf_delay_ms(200); // Allow disconnect to complete
         }
         m_conn_handle = BLE_CONN_HANDLE_INVALID;
     }
-    NRF_LOG_INFO("Stopping advertising...");
 #if defined(S112)
     uint8_t adv_handle = 0; // Try handle 0 first (most common)
     ret_code_t adv_err = sd_ble_gap_adv_stop(adv_handle);
@@ -337,46 +313,36 @@ void enter_deep_sleep(void) {
         adv_err = sd_ble_gap_adv_stop(0xFF);
     }
     if (adv_err != NRF_SUCCESS && adv_err != NRF_ERROR_INVALID_STATE && adv_err != BLE_ERROR_INVALID_ADV_HANDLE) {
-        NRF_LOG_WARNING("Failed to stop advertising: 0x%X", adv_err);
     }
 #else
     ret_code_t adv_err = sd_ble_gap_adv_stop();
     if (adv_err != NRF_SUCCESS && adv_err != NRF_ERROR_INVALID_STATE) {
-        NRF_LOG_WARNING("Failed to stop advertising: 0x%X", adv_err);
     }
 #endif
     nrf_delay_ms(100);
-    NRF_LOG_INFO("Preparing EPD for sleep...");
     ble_epd_sleep_prepare(&m_epd);
     nrf_delay_ms(100);
     if (isAuthenticated()) {
-        NRF_LOG_INFO("Clearing encryption session...");
         clearEncryptionSession();
     }
-    NRF_LOG_INFO("Disabling interrupts...");
     NVIC->ICER[0] = 0xFFFFFFFF;
     NVIC->ICPR[0] = 0xFFFFFFFF;
 #if defined(__NRF_NVIC_ISER_COUNT) && __NRF_NVIC_ISER_COUNT == 2
     NVIC->ICER[1] = 0xFFFFFFFF;
     NVIC->ICPR[1] = 0xFFFFFFFF;
 #endif
-    NRF_LOG_INFO("Entering System OFF mode...");
-    NRF_LOG_FINAL_FLUSH();
     nrf_delay_ms(200);
 #ifdef SOFTDEVICE_PRESENT
 #if defined(S112)
     if (nrf_sdh_is_enabled()) {
         ret_code_t err_code = sd_power_system_off();
         if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_SOFTDEVICE_NOT_ENABLED) {
-            NRF_LOG_ERROR("Failed to enter System OFF via SoftDevice: 0x%X", err_code);
         }
     }
 #else
     ret_code_t err_code = sd_power_system_off();
     if (err_code == NRF_ERROR_SOFTDEVICE_NOT_ENABLED || err_code == NRF_ERROR_NOT_SUPPORTED) {
-        NRF_LOG_INFO("SoftDevice not available, using direct System OFF");
     } else if (err_code != NRF_SUCCESS) {
-        NRF_LOG_WARNING("SoftDevice System OFF returned: 0x%X, using direct access", err_code);
     }
 #endif
 #endif
@@ -429,11 +395,8 @@ static void gap_params_init(void) {
     APP_ERROR_CHECK(sd_ble_gap_address_get(&addr));
 #endif
 
-    NRF_LOG_INFO("Bluetooth MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n", addr.addr[5], addr.addr[4], addr.addr[3],
-                 addr.addr[2], addr.addr[1], addr.addr[0]);
     getChipIdHex(chipId, sizeof(chipId));
     snprintf(device_name, sizeof(device_name), "%s%s", DEVICE_NAME_PREFIX, chipId);
-    NRF_LOG_INFO("Device name: %s\n", device_name);
     APP_ERROR_CHECK(sd_ble_gap_device_name_set(&sec_mode, (const uint8_t*)device_name, strlen(device_name)));
 
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));
@@ -501,7 +464,6 @@ void advertising_restart_with_updated_msd(void) {
     
     ret_code_t err_code = ble_advertising_advdata_update(&m_advertising, &advdata, &scanrsp);
     if (err_code != NRF_SUCCESS) {
-        NRF_LOG_WARNING("Failed to update advertising data: 0x%X\n", err_code);
     }
 #else
     ret_code_t err_code = sd_ble_gap_adv_stop();
@@ -532,9 +494,7 @@ void advertising_restart_with_updated_msd(void) {
         err_code = ble_advertising_init(&advdata, &scanrsp, &options, on_adv_evt, NULL);
         if (err_code == NRF_SUCCESS) {
             advertising_start();
-            NRF_LOG_DEBUG("Advertising restarted with new MSD\n");
         } else {
-            NRF_LOG_WARNING("Failed to reinit advertising: 0x%X\n", err_code);
         }
     }
 #endif
@@ -552,7 +512,6 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
         case BLE_ADV_EVT_FAST:
             break;
         case BLE_ADV_EVT_IDLE:
-            NRF_LOG_INFO("advertising timeout\n");
             break;
         default:
             break;
@@ -562,12 +521,10 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 static void on_ble_evt(ble_evt_t* p_ble_evt) {
     switch (p_ble_evt->header.evt_id) {
         case BLE_GAP_EVT_CONNECTED:
-            NRF_LOG_INFO("CONNECTED\n");
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
-            NRF_LOG_INFO("DISCONNECTED\n");
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
 #if !defined(S112)
             advertising_start();
@@ -713,12 +670,6 @@ static void advertising_init(void) {
 #endif
 }
 
-static void log_init(void) {
-    APP_ERROR_CHECK(NRF_LOG_INIT(timestamp));
-#if defined(S112)
-    NRF_LOG_DEFAULT_BACKENDS_INIT();
-#endif
-}
 
 static void power_management_init(void) {
 #if defined(S112)
@@ -733,8 +684,6 @@ static void power_management_init(void) {
 #endif
 
 void enter_dfu_mode(void) {
-    NRF_LOG_INFO("Entering DFU bootloader mode");
-    NRF_LOG_FINAL_FLUSH();
     if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
         sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
         nrf_delay_ms(200);
@@ -773,21 +722,15 @@ static void idle_state_handle(void) {
         first_update = true;
     }
     process_button_events();
-    if (NRF_LOG_PROCESS() == false) {
-        nrf_pwr_mgmt_run();
-    }
+    nrf_pwr_mgmt_run();
 }
 
 void wdt_event_handler(void) {
-    NRF_LOG_ERROR("WDT Rest!\r\n");
-    NRF_LOG_FINAL_FLUSH();
 }
 
 int main(void) {
-    log_init();
     m_resetreas = NRF_POWER->RESETREAS;
     NRF_POWER->RESETREAS |= NRF_POWER->RESETREAS;
-    NRF_LOG_DEBUG("init..\n");
     nrf_drv_wdt_config_t config = NRF_DRV_WDT_DEAFULT_CONFIG;
     APP_ERROR_CHECK(nrf_drv_wdt_init(&config, wdt_event_handler));
     APP_ERROR_CHECK(nrf_drv_wdt_channel_alloc(&m_wdt_channel_id));
@@ -805,7 +748,6 @@ int main(void) {
 #endif
     bool config_loaded = loadGlobalConfig(&globalConfig);
     if (!config_loaded) {
-        NRF_LOG_INFO("No config found - using defaults");
     }
     encryption_init();
     checkResetPin();
@@ -814,10 +756,8 @@ int main(void) {
     button_init();
     if (globalConfig.display_count > 0) {
         m_epd.display_config = &globalConfig.displays[0];
-        NRF_LOG_INFO("Display config set: panel_ic_type=0x%04X", m_epd.display_config->panel_ic_type);
     } else {
         m_epd.display_config = NULL;
-        NRF_LOG_INFO("No display config - display features disabled");
     }
     m_epd.global_config = &globalConfig;
     services_init();
@@ -826,37 +766,22 @@ int main(void) {
     application_timers_start();
     advertising_start();
     if (m_epd.display_config != NULL && m_epd.display_config->panel_ic_type != 0) {
-        NRF_LOG_INFO("Initializing EPD: panel_ic=0x%04X", m_epd.display_config->panel_ic_type);
         EPD_GPIO_Load_DisplayConfig(m_epd.display_config, m_epd.global_config);
-        NRF_LOG_INFO("EPD pins: DATA=%d CLK=%d CS=%d DC=%d", 
-                     m_epd.display_config->data_pin, m_epd.display_config->clk_pin, 
-                     m_epd.display_config->cs_pin, m_epd.display_config->dc_pin);
-        NRF_LOG_INFO("EPD pins: RST=%d BUSY=%d BS=13", 
-                     m_epd.display_config->reset_pin, m_epd.display_config->busy_pin);
         epd_model_id_t model_id = map_panel_ic_to_model_id(m_epd.display_config->panel_ic_type, m_epd.display_config->color_scheme);
-        NRF_LOG_INFO("EPD model_id=%d", model_id);
-        NRF_LOG_INFO("Initializing GPIO...");
         EPD_GPIO_Init();
-        NRF_LOG_INFO("Calling epd_init...");
         m_epd.epd = epd_init(model_id);
         if (m_epd.epd) {
-            NRF_LOG_INFO("EPD initialized successfully");
             if ((m_epd.display_config->transmission_modes & (1 << 7)) != 0) {
-                NRF_LOG_INFO("CLEAR_ON_BOOT enabled - clearing display");
                 m_epd.epd->drv->clear(m_epd.epd, true);
             }
-            NRF_LOG_INFO("Rendering boot screen (QR + name/key)");
             (void)boot_screen_render(m_epd.epd, &globalConfig);
-            NRF_LOG_INFO("Putting EPD to sleep and uninitializing GPIO for power saving");
             m_epd.epd->drv->sleep(m_epd.epd);
             nrf_delay_ms(EPD_SLEEP_DELAY_MS);
             EPD_GPIO_Uninit();
         } else {
-            NRF_LOG_ERROR("EPD init failed - returned NULL");
             EPD_GPIO_Uninit();
         }
     } else {
-        NRF_LOG_INFO("Skipping EPD initialization: no display config found");
     }
 
     for (;;) {

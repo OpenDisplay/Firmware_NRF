@@ -48,7 +48,6 @@ void UC81xx_SetWindow(epd_model_t* epd, uint16_t x, uint16_t y, uint16_t w, uint
 }
 
 void UC81xx_Refresh(epd_model_t* epd) {
-    EPD_DEBUG("refresh begin");
 
     if (epd->ic == DRV_IC_UC8159 && epd->id == UC8159_750_LOW_BWR) {
         EPD_WriteCmd(UC81xx_DSP);
@@ -67,7 +66,6 @@ void UC81xx_Refresh(epd_model_t* epd) {
     delay(100);
     UC81xx_WaitBusy(UINT16_MAX);
 
-    EPD_DEBUG("refresh end");
 }
 
 void UC81xx_Init(epd_model_t* epd) {

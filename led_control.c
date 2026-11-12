@@ -77,7 +77,6 @@ void ledFlashLogic(void) {
             }
         }
         if (activeLedInstance == LED_INSTANCE_NONE) {
-            NRF_LOG_ERROR("No RGB LED configured");
             return;
         }
     }

@@ -202,7 +202,6 @@ void EPD_Reset(bool status, uint16_t duration) {
 bool EPD_ReadBusy(void) { return digitalRead(EPD_BUSY_PIN); }
 
 void EPD_WaitBusy(bool status, uint16_t timeout) {
-    EPD_DEBUG("check busy");
     while (EPD_ReadBusy() == status) {
         if (timeout % EPD_BUSY_WDT_FEED_INTERVAL == 0) {
             app_feed_wdt();
@@ -210,11 +209,9 @@ void EPD_WaitBusy(bool status, uint16_t timeout) {
         delay(EPD_BUSY_CHECK_DELAY_MS);
         timeout--;
         if (timeout == 0) {
-            EPD_DEBUG("busy timeout!");
             break;
         }
     }
-    EPD_DEBUG("busy release");
 }
 
 uint16_t EPD_ReadVoltage(void) {
@@ -258,7 +255,6 @@ uint16_t EPD_ReadVoltage(void) {
     NRF_ADC->TASKS_STOP = 1;
     NRF_ADC->ENABLE = 0;
 #endif
-    EPD_DEBUG("ADC value: %d", value);
     return (value * 3600) / (1 << 10);
 }
 

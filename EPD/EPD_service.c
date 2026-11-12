@@ -61,9 +61,6 @@ static void epd_reset_window(ble_epd_t* p_epd);
 
 static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     if (p_epd->display_config != NULL && p_epd->epd != NULL) {
-        NRF_LOG_INFO("EPD: %dx%d, type=0x%04X, model=%d, color=%d",
-                     p_epd->display_config->pixel_width, p_epd->display_config->pixel_height,
-                     p_epd->display_config->panel_ic_type, p_epd->epd->id, p_epd->epd->color);
     }
     
     p_epd->conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
@@ -73,7 +70,6 @@ static void on_disconnect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     UNUSED_PARAMETER(p_ble_evt);
     p_epd->conn_handle = BLE_CONN_HANDLE_INVALID;
     if (isAuthenticated()) {
-        NRF_LOG_INFO("Clearing encryption session on disconnect");
         clearEncryptionSession();
     }
     if (directWriteState.active && p_epd->epd && p_epd->epd->drv) {
@@ -87,18 +83,15 @@ static uint32_t send_response_raw(ble_epd_t* p_epd, uint8_t* response, uint16_t 
         return NRF_ERROR_NULL;
     }
     if (!p_epd->is_notification_enabled) {
-        NRF_LOG_DEBUG("Notifications not enabled, cannot send response\n");
         return NRF_ERROR_INVALID_STATE;
     }
     if (p_epd->conn_handle == BLE_CONN_HANDLE_INVALID) {
-        NRF_LOG_DEBUG("Not connected, cannot send response\n");
         return NRF_ERROR_INVALID_STATE;
     }
     return ble_epd_string_send(p_epd, response, len);
 }
 
 static uint32_t send_response_unencrypted(ble_epd_t* p_epd, uint8_t* response, uint16_t len) {
-    NRF_LOG_DEBUG("Sending unencrypted response (%d bytes)", len);
     return send_response_raw(p_epd, response, len);
 }
 
@@ -121,12 +114,10 @@ static uint32_t send_response(ble_epd_t* p_epd, uint8_t* response, uint16_t len)
         uint8_t tag[12];
 
         if (encryptResponse(response, len, enc_buf, &enc_len, nonce, tag)) {
-            NRF_LOG_DEBUG("Encrypted response: %d -> %d bytes", len, enc_len);
             ret_code_t result = send_response_raw(p_epd, enc_buf, enc_len);
             memset(enc_buf, 0, sizeof(enc_buf));
             return result;
         } else {
-            NRF_LOG_ERROR("encryptResponse failed, sending unencrypted error");
             memset(enc_buf, 0, sizeof(enc_buf));
             uint8_t err[3] = { 0x00, response[1], 0xFF };
             return send_response_unencrypted(p_epd, err, 3);
@@ -140,7 +131,6 @@ static void handle_read_config(ble_epd_t* p_epd) {
     static uint8_t configData[MAX_CONFIG_SIZE];
     uint32_t configLen = MAX_CONFIG_SIZE;
     if (!initConfigStorage()) {
-        NRF_LOG_ERROR("Failed to initialize config storage\n");
         uint8_t errorResponse[] = {0xFF, RESP_CONFIG_READ, 0x00, 0x00};
         (void)send_response(p_epd, errorResponse, sizeof(errorResponse));
         return;
@@ -187,7 +177,6 @@ static void handle_read_config(ble_epd_t* p_epd) {
         }
         uint32_t err_code = send_response(p_epd, configReadResponseBuffer, responseLen);
         if (err_code != NRF_SUCCESS) {
-            NRF_LOG_ERROR("Failed to send config chunk %d: %d\n", chunkNumber, err_code);
             break;
         }
         offset += chunkSize;
@@ -203,10 +192,8 @@ static void handle_write_config(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
     }
     if (isEncryptionEnabled() && !isAuthenticated()) {
         if (securityConfig.flags & SECURITY_FLAG_REWRITE_ALLOWED) {
-            NRF_LOG_WARNING("Unauthenticated config write allowed (SECURITY_FLAG_REWRITE_ALLOWED set)");
             secureEraseConfig(false);
         } else {
-            NRF_LOG_WARNING("Config write rejected: encryption enabled, not authenticated, and rewrite_allowed flag not set");
             send_auth_required_response(p_epd, RESP_CONFIG_WRITE);
             return;
         }
@@ -325,7 +312,6 @@ static void handle_write_config_chunk(ble_epd_t* p_epd, uint8_t* data, uint16_t 
     if (chunkedWriteState.receivedChunks >= chunkedWriteState.expectedChunks) {
         if (isEncryptionEnabled() && !isAuthenticated()) {
             if (!(securityConfig.flags & SECURITY_FLAG_REWRITE_ALLOWED)) {
-                NRF_LOG_WARNING("Config chunk write rejected: encryption enabled, not authenticated, and rewrite_allowed flag not set");
                 chunkedWriteState.active = false;
                 chunkedWriteState.receivedSize = 0;
                 chunkedWriteState.receivedChunks = 0;
@@ -360,7 +346,6 @@ static void send_auth_required_response(ble_epd_t* p_epd, uint8_t cmd_byte) {
 }
 
 static void handle_authenticate(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
-    NRF_LOG_INFO("=== AUTHENTICATE COMMAND (0x0050) ===");
     static uint8_t auth_response[24];
     uint16_t auth_response_len = 0;
     handleAuthenticate(data, len, auth_response, &auth_response_len);
@@ -402,7 +387,6 @@ static void cleanup_direct_write_state(ble_epd_t* p_epd) {
 
 static void handle_direct_write_start(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
     if (p_epd->epd == NULL) {
-        NRF_LOG_ERROR("DW: EPD not initialized\n");
         send_error_response(p_epd, RESP_DIRECT_WRITE_ERROR);
         return;
     }
@@ -427,12 +411,10 @@ static void handle_direct_write_start(ble_epd_t* p_epd, uint8_t* data, uint16_t 
 
 static void handle_direct_write_data(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
     if (!directWriteState.active) {
-        NRF_LOG_ERROR("DW: Data received but not active\n");
         send_error_response(p_epd, RESP_DIRECT_WRITE_ERROR);
         return;
     }
     if (p_epd->epd == NULL || p_epd->epd->drv == NULL || p_epd->epd->drv->write_ram == NULL) {
-        NRF_LOG_ERROR("DW: Driver not available\n");
         cleanup_direct_write_state(p_epd);
         send_error_response(p_epd, RESP_DIRECT_WRITE_ERROR);
         return;
@@ -455,7 +437,6 @@ static void handle_direct_write_data(ble_epd_t* p_epd, uint8_t* data, uint16_t l
         }
         uint32_t remaining_bytes = directWriteState.total_bytes - directWriteState.bytes_written;
         if (remaining_bytes == 0) {
-            NRF_LOG_WARNING("DW: Overrun! Received %d extra bytes after plane completion\n", (len - stream_offset));
             break;
         }
         uint16_t bytes_to_write = len - stream_offset;
@@ -513,12 +494,10 @@ static void handle_direct_write_data(ble_epd_t* p_epd, uint8_t* data, uint16_t l
 
 static void handle_direct_write_end(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
     if (!directWriteState.active) {
-        NRF_LOG_WARNING("DW: End called but not active\n");
         return;
     }
     
     if (p_epd->epd == NULL || p_epd->epd->drv == NULL) {
-        NRF_LOG_ERROR("EPD driver not available\n");
         cleanup_direct_write_state(p_epd);
         send_error_response(p_epd, RESP_DIRECT_WRITE_ERROR);
         EPD_GPIO_Uninit();
@@ -553,33 +532,25 @@ static void handle_direct_write_end(ble_epd_t* p_epd, uint8_t* data, uint16_t le
         } else {
             uint8_t timeoutResponse[] = {0x00, RESP_DIRECT_WRITE_REFRESH_TIMEOUT};
             (void)send_response(p_epd, timeoutResponse, sizeof(timeoutResponse));
-            NRF_LOG_WARNING("DW: Display refresh timed out\n");
         }
     } else {
         cleanup_direct_write_state(p_epd);
         epd_sleep_and_uninit(p_epd);
         send_error_response(p_epd, RESP_DIRECT_WRITE_ERROR);
-        NRF_LOG_ERROR("Display refresh function not available\n");
     }
 }
 
 static void handle_led_activate(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
-    NRF_LOG_INFO("=== LED ACTIVATE COMMAND (0x0073) ===\n");
     
     if (len < 1) {
-        NRF_LOG_ERROR("LED activate command too short (len=%d, need at least 1 byte)\n", len);
         uint8_t errorResponse[] = {0xFF, RESP_LED_ACTIVATE_ACK, 0x01, 0x00};  // Error, command, error code, no data
         (void)send_response(p_epd, errorResponse, sizeof(errorResponse));
         return;
     }
     
     uint8_t ledInstance = data[0];
-    NRF_LOG_INFO("LED instance: %d\n", ledInstance);
     
     if (p_epd->global_config == NULL || ledInstance >= p_epd->global_config->led_count) {
-        NRF_LOG_ERROR("LED instance %d out of range (led_count=%d)\n", 
-                     ledInstance, 
-                     p_epd->global_config ? p_epd->global_config->led_count : 0);
         uint8_t errorResponse[] = {0xFF, RESP_LED_ACTIVATE_ACK, 0x02, 0x00};  // Error, command, error code, no data
         (void)send_response(p_epd, errorResponse, sizeof(errorResponse));
         return;
@@ -588,38 +559,22 @@ static void handle_led_activate(ble_epd_t* p_epd, uint8_t* data, uint16_t len) {
     struct LedConfig* led = &p_epd->global_config->leds[ledInstance];
     led_activate(ledInstance);
     
-    NRF_LOG_INFO("Using LED instance %d: type=%d R=%d G=%d B=%d\n",
-                 ledInstance, led->led_type, led->led_1_r, led->led_2_g, led->led_3_b);
     
     uint8_t* ledcfg = led->reserved;
     
     if (len >= 13) {
-        NRF_LOG_INFO("Updating LED flash config from command data\n");
         memcpy(ledcfg, data + 1, 12);
-        uint8_t modeByte = ledcfg[0];
-        uint8_t mode = modeByte & 0x0F;
-        uint8_t brightnessRaw = (modeByte >> 4) & 0x0F;
-        uint8_t brightness = brightnessRaw + 1;
-        NRF_LOG_INFO("Mode byte 0x%02X: mode=%d brightness=%d\n", modeByte, mode, brightness);
-        if (mode == 0) {
-            NRF_LOG_WARNING("Mode is 0 (disabled)! Set bit 0 to 1 for mode 1.\n");
-        }
-    } else {
-        NRF_LOG_INFO("No config provided (len=%d), using existing config\n", len);
     }
     
-    NRF_LOG_INFO("Activating LED flash\n");
     led_set_flash_active(true);
     ledFlashLogic();
     led_set_flash_active(false);
     
     uint8_t successResponse[] = {0x00, RESP_LED_ACTIVATE_ACK, 0x00, 0x00};  // Success, command, no error, no data
     (void)send_response(p_epd, successResponse, sizeof(successResponse));
-    NRF_LOG_INFO("LED flash completed\n");
 }
 
 static void handle_deep_sleep(ble_epd_t* p_epd) {
-    NRF_LOG_INFO("Preparing for deep sleep (System OFF)...");
     
     uint8_t resp[] = {0x00, RESP_DEEP_SLEEP};
     (void)send_response(p_epd, resp, sizeof(resp));
@@ -655,12 +610,10 @@ static void dispatch_command(ble_epd_t* p_epd, uint16_t command_16bit,
             handle_led_activate(p_epd, payload, payload_len);
             break;
         case CMD_REBOOT:
-            NRF_LOG_INFO("Reboot command received (0x000F)");
             nrf_delay_ms(100);
             NVIC_SystemReset();
             break;
         case CMD_ENTER_DFU:
-            NRF_LOG_INFO("Enter DFU command received (0x0051)");
             {
                 uint8_t resp[] = {0x00, RESP_ENTER_DFU};
                 (void)send_response(p_epd, resp, sizeof(resp));
@@ -669,7 +622,6 @@ static void dispatch_command(ble_epd_t* p_epd, uint16_t command_16bit,
             enter_dfu_mode();
             break;
         case CMD_DEEP_SLEEP:
-            NRF_LOG_INFO("Deep sleep command received (0x0052)");
             handle_deep_sleep(p_epd);
             break;
         case CMD_FIRMWARE_VERSION:
@@ -679,7 +631,6 @@ static void dispatch_command(ble_epd_t* p_epd, uint16_t command_16bit,
             handle_read_msd(p_epd);
             break;
         default:
-            NRF_LOG_DEBUG("Unknown command: 0x%04X", command_16bit);
             break;
     }
 }
@@ -688,12 +639,10 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
     if (p_data == NULL || length <= 0) return;
 
     if (length < 2) {
-        NRF_LOG_DEBUG("Command too short: %d bytes", length);
         return;
     }
 
     if (length > MAX_BLE_PACKET_SIZE) {
-        NRF_LOG_ERROR("BLE packet too large: %d bytes (max: %d)", length, MAX_BLE_PACKET_SIZE);
         uint8_t err[] = { 0xFF, p_data[1], 0xFE };  // Error response with packet too large indicator
         (void)send_response_unencrypted(p_epd, err, sizeof(err));
         return;
@@ -701,7 +650,6 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 
     uint16_t command_16bit = (p_data[0] << 8) | p_data[1];
 
-    NRF_LOG_INFO("Processing command: 0x%02X", command_16bit);
     
     if (command_16bit == CMD_AUTHENTICATE) {
         handle_authenticate(p_epd, &p_data[2], length - 2);
@@ -710,8 +658,6 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 
     if (!isEncryptionEnabled()) {
         if (length > MAX_UNENCRYPTED_PACKET_SIZE) {
-            NRF_LOG_ERROR("Unencrypted packet too large: %d bytes (max: %d)", 
-                         length, MAX_UNENCRYPTED_PACKET_SIZE);
             uint8_t err[] = { 0xFF, p_data[1], 0xFE };
             (void)send_response_unencrypted(p_epd, err, sizeof(err));
             return;
@@ -721,8 +667,6 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
     }
     if (length >= 31) {
         if (length < BLE_CMD_HEADER_SIZE + ENCRYPTION_NONCE_SIZE + ENCRYPTION_TAG_SIZE) {
-            NRF_LOG_ERROR("Encrypted packet too short: %d bytes (min: %d)", 
-                         length, BLE_CMD_HEADER_SIZE + ENCRYPTION_NONCE_SIZE + ENCRYPTION_TAG_SIZE);
             uint8_t err[] = { 0xFF, p_data[1], 0xFE };
             (void)send_response_unencrypted(p_epd, err, sizeof(err));
             return;
@@ -732,18 +676,13 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
         memcpy(nonce, p_data + 2, 16);
         uint16_t enc_data_len = length - 2 - 16 - 12;
         if (enc_data_len > MAX_ENCRYPTED_CIPHERTEXT_LEN) {
-            NRF_LOG_ERROR("Encrypted data too large: %d bytes (max: %d)", 
-                         enc_data_len, MAX_ENCRYPTED_CIPHERTEXT_LEN);
             uint8_t err[] = { 0xFF, p_data[1], 0xFE };
             (void)send_response_unencrypted(p_epd, err, sizeof(err));
             return;
         }
         uint8_t* enc_data = p_data + 2 + 16;
         memcpy(tag, p_data + length - 12, 12);
-        NRF_LOG_INFO("Encrypted command: len=%d, cmd=0x%04X, enc_data_len=%d",
-                     length, command_16bit, enc_data_len);
         if (!isAuthenticated()) {
-            NRF_LOG_WARNING("Encrypted command but not authenticated");
             send_auth_required_response(p_epd, p_data[1]);
             return;
         }
@@ -751,11 +690,9 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
         uint16_t plaintext_len = 0;
         if (decryptCommand(enc_data, enc_data_len, plaintext, &plaintext_len,
                            nonce, tag, command_16bit)) {
-            NRF_LOG_INFO("Decrypted command: %d bytes payload", plaintext_len);
             dispatch_command(p_epd, command_16bit, plaintext, plaintext_len);
             memset(plaintext, 0, sizeof(plaintext));
         } else {
-            NRF_LOG_ERROR("Decryption failed");
             uint8_t err[] = { 0x00, p_data[1], 0xFF };
             (void)send_response_unencrypted(p_epd, err, sizeof(err));
             memset(plaintext, 0, sizeof(plaintext));
@@ -763,14 +700,10 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
         return;
     }
     if (!isAuthenticated()) {
-        NRF_LOG_INFO("Unencrypted command 0x%04X while encryption enabled, returning 0xFE",
-                     command_16bit);
         send_auth_required_response(p_epd, p_data[1]);
         return;
     }
     if (length > MAX_UNENCRYPTED_PACKET_SIZE) {
-        NRF_LOG_ERROR("Unencrypted packet too large: %d bytes (max: %d)", 
-                     length, MAX_UNENCRYPTED_PACKET_SIZE);
         uint8_t err[] = { 0xFF, p_data[1], 0xFE };
         (void)send_response_unencrypted(p_epd, err, sizeof(err));
         return;
@@ -782,7 +715,6 @@ static void on_write(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     ble_gatts_evt_write_t* p_evt_write = &p_ble_evt->evt.gatts_evt.params.write;
     if ((p_evt_write->handle == p_epd->char_handles.cccd_handle) && (p_evt_write->len == 2)) {
         if (ble_srv_is_notification_enabled(p_evt_write->data)) {
-            NRF_LOG_DEBUG("notification enabled\n");
             p_epd->is_notification_enabled = true;
             // Config read now handled by config command handler
         } else {

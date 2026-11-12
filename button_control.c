@@ -54,7 +54,6 @@ void button_init(void) {
     if (!nrf_drv_gpiote_is_init()) {
         ret_code_t err_code = nrf_drv_gpiote_init();
         if (err_code != NRF_SUCCESS) {
-            NRF_LOG_ERROR("Failed to initialize GPIOTE: %d", err_code);
             return;
         }
     }
@@ -84,8 +83,6 @@ void button_init(void) {
         }
         
         if (input->button_data_byte_index >= 11) {
-            NRF_LOG_WARNING("BinaryInputs instance %d has invalid byte_index (%d), skipping",
-                           instanceIdx, input->button_data_byte_index);
             continue;
         }
         
@@ -108,7 +105,6 @@ void button_init(void) {
             }
             
             if (buttonStateCount >= MAX_BUTTONS) {
-                NRF_LOG_WARNING("Maximum button count (%d) reached, skipping remaining pins", MAX_BUTTONS);
                 break;
             }
             
@@ -152,7 +148,6 @@ void button_init(void) {
             
             ret_code_t err_code = nrf_drv_gpiote_in_init(pin, &in_config, gpiote_event_handler);
             if (err_code != NRF_SUCCESS) {
-                NRF_LOG_ERROR("Failed to initialize GPIOTE for pin %d: %d", pin, err_code);
                 continue;
             }
             

@@ -23,14 +23,12 @@ static volatile bool fds_write_success = false;
 
 static void fds_evt_handler(fds_evt_t const* const p_fds_evt) {
     if (p_fds_evt->result != NRF_SUCCESS) {
-        NRF_LOG_ERROR("FDS event %d failed: %d\n", p_fds_evt->id, p_fds_evt->result);
     }
     if (p_fds_evt->id == FDS_EVT_WRITE || p_fds_evt->id == FDS_EVT_UPDATE) {
         if (p_fds_evt->write.file_id == CONFIG_FILE_ID && 
             p_fds_evt->write.record_key == CONFIG_REC_KEY) {
             fds_write_pending = false;
             fds_write_success = (p_fds_evt->result == NRF_SUCCESS);
-            NRF_LOG_DEBUG("FDS write completed: %s\n", fds_write_success ? "success" : "failed");
         }
     }
 }
@@ -44,13 +42,11 @@ bool initConfigStorage(void) {
     
     ret = fds_register(fds_evt_handler);
     if (ret != NRF_SUCCESS) {
-        NRF_LOG_ERROR("fds_register failed: %d\n", ret);
         return false;
     }
     
     ret = fds_init();
     if (ret != NRF_SUCCESS) {
-        NRF_LOG_ERROR("fds_init failed: %d\n", ret);
         return false;
     }
     
@@ -58,7 +54,6 @@ bool initConfigStorage(void) {
     
     ret = fds_gc();
     if (ret != NRF_SUCCESS && ret != FDS_ERR_NO_SPACE_IN_FLASH) {
-        NRF_LOG_DEBUG("fds_gc returned: %d\n", ret);
     }
     
     return true;
@@ -66,12 +61,10 @@ bool initConfigStorage(void) {
 
 bool saveConfig(uint8_t* configData, uint32_t len) {
     if (len > MAX_CONFIG_SIZE) {
-        NRF_LOG_ERROR("Config data too large: %d bytes\n", len);
         return false;
     }
     
     if (!fds_initialized) {
-        NRF_LOG_ERROR("FDS not initialized\n");
         return false;
     }
     
@@ -112,7 +105,6 @@ bool saveConfig(uint8_t* configData, uint32_t len) {
     if (ret == NRF_SUCCESS) {
         ret = fds_record_update(&record_desc, &record);
         if (ret != NRF_SUCCESS) {
-            NRF_LOG_ERROR("fds_record_update failed: %d\n", ret);
             fds_write_pending = false;
             if (ret == FDS_ERR_NO_SPACE_IN_FLASH) {
                 fds_gc();
@@ -122,7 +114,6 @@ bool saveConfig(uint8_t* configData, uint32_t len) {
     } else {
         ret = fds_record_write(&record_desc, &record);
         if (ret != NRF_SUCCESS) {
-            NRF_LOG_ERROR("fds_record_write failed: %d\n", ret);
             fds_write_pending = false;
             if (ret == FDS_ERR_NO_SPACE_IN_FLASH) {
                 fds_gc();
@@ -143,17 +134,14 @@ bool saveConfig(uint8_t* configData, uint32_t len) {
     }
     
     if (fds_write_pending) {
-        NRF_LOG_ERROR("FDS write timeout\n");
         fds_write_pending = false;
         return false;
     }
     
     if (!fds_write_success) {
-        NRF_LOG_ERROR("FDS write failed\n");
         return false;
     }
     
-    NRF_LOG_DEBUG("Config saved: %d bytes\n", totalSize);
     return true;
 }
 
@@ -170,13 +158,11 @@ bool loadConfig(uint8_t* configData, uint32_t* len) {
     
     ret_code_t ret = fds_record_find(CONFIG_FILE_ID, CONFIG_REC_KEY, &record_desc, &ftok);
     if (ret != NRF_SUCCESS) {
-        NRF_LOG_DEBUG("Config record not found\n");
         return false;
     }
     
     ret = fds_record_open(&record_desc, &flash_record);
     if (ret != NRF_SUCCESS) {
-        NRF_LOG_ERROR("fds_record_open failed: %d\n", ret);
         return false;
     }
     
@@ -190,7 +176,6 @@ bool loadConfig(uint8_t* configData, uint32_t* len) {
     size_t headerSize = sizeof(config_storage_t) - MAX_CONFIG_SIZE;
     
     if (record_len < headerSize) {
-        NRF_LOG_ERROR("Config record too short: %d bytes\n", record_len);
         fds_record_close(&record_desc);
         return false;
     }
@@ -198,26 +183,22 @@ bool loadConfig(uint8_t* configData, uint32_t* len) {
     memcpy(&config, flash_record.p_data, MIN(sizeof(config_storage_t), record_len));
     
     if (config.magic != 0xDEADBEEF) {
-        NRF_LOG_ERROR("Invalid config magic: 0x%08X\n", config.magic);
         fds_record_close(&record_desc);
         return false;
     }
     
     if (config.data_len > MAX_CONFIG_SIZE) {
-        NRF_LOG_ERROR("Config data too large: %d bytes\n", config.data_len);
         fds_record_close(&record_desc);
         return false;
     }
     
     if (config.data_len > *len) {
-        NRF_LOG_ERROR("Config data larger than buffer: %d > %d\n", config.data_len, *len);
         fds_record_close(&record_desc);
         return false;
     }
     
     uint32_t calculatedCRC = calculateConfigCRC(config.data, config.data_len);
     if (config.crc != calculatedCRC) {
-        NRF_LOG_ERROR("Config CRC mismatch: 0x%08X != 0x%08X\n", config.crc, calculatedCRC);
         fds_record_close(&record_desc);
         return false;
     }
@@ -227,7 +208,6 @@ bool loadConfig(uint8_t* configData, uint32_t* len) {
     
     fds_record_close(&record_desc);
     
-    NRF_LOG_DEBUG("Config loaded: %d bytes\n", config.data_len);
     return true;
 }
 
