@@ -1,0 +1,7 @@
+# build outputs
+build-nrf52/_build/
+*.o
+*.out
+*.map
+/host/build/
+__pycache__/
