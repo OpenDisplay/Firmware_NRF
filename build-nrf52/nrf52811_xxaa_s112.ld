@@ -5,9 +5,10 @@ GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
-  /* Application flash: starts after SoftDevice (0x19000), ends at 0x30000 (92KB) */
-  /* Note: If using bootloader, application must be smaller to leave room at 0x29000+ */
-  FLASH (rx) : ORIGIN = 0x19000, LENGTH = 0x17000  /* 92KB for application */
+  /* Application flash: 0x19000 (end of S112) up to 0x27000, where the two FDS pages start
+   * (0x27000-0x29000), followed by the Secure DFU bootloader at 0x29000. 57,344 B. A larger
+   * image would overwrite the config pages when flashed or DFU'd, so the link must fail. */
+  FLASH (rx) : ORIGIN = 0x19000, LENGTH = 0xE000
   RAM (rwx) :  ORIGIN = 0x200022d8, LENGTH = 0x3d28
   CODE_RAM (rwx) : ORIGIN = 0x800000, LENGTH = 0x6000
 }
