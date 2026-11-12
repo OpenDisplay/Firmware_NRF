@@ -14,7 +14,6 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define BUFFER_SIZE 128
 
-extern void app_feed_wdt(void); // Feed the watchdog timer (main.c)
 
 static uint32_t EPD_MOSI_PIN = 5;
 static uint32_t EPD_SCLK_PIN = 8;
@@ -165,54 +164,11 @@ void EPD_ReadData(uint8_t* value, uint8_t len) {
     EPD_SPI_Read(value, len);
 }
 
-void EPD_WriteByte(uint8_t value) {
-    digitalWrite(EPD_DC_PIN, HIGH);
-    EPD_SPI_Write(&value, 1);
-}
 
-uint8_t EPD_ReadByte(void) {
-    uint8_t value;
-    digitalWrite(EPD_DC_PIN, HIGH);
-    EPD_SPI_Read(&value, 1);
-    return value;
-}
 
-void EPD_FillRAM(uint8_t cmd, uint8_t value, uint32_t len) {
-    uint8_t buffer[BUFFER_SIZE];
-    for (uint8_t i = 0; i < BUFFER_SIZE; i++) buffer[i] = value;
-
-    EPD_WriteCmd(cmd);
-    uint16_t remaining = len;
-    while (remaining > 0) {
-        uint16_t chunk_size = (remaining > BUFFER_SIZE) ? BUFFER_SIZE : remaining;
-        EPD_WriteData(buffer, chunk_size);
-        remaining -= chunk_size;
-    }
-}
-
-void EPD_Reset(bool status, uint16_t duration) {
-    digitalWrite(EPD_RST_PIN, status);
-    delay(duration);
-    digitalWrite(EPD_RST_PIN, status ? LOW : HIGH);
-    delay(duration);
-    digitalWrite(EPD_RST_PIN, status);
-    delay(duration);
-}
 
 bool EPD_ReadBusy(void) { return digitalRead(EPD_BUSY_PIN); }
 
-void EPD_WaitBusy(bool status, uint16_t timeout) {
-    while (EPD_ReadBusy() == status) {
-        if (timeout % EPD_BUSY_WDT_FEED_INTERVAL == 0) {
-            app_feed_wdt();
-        }
-        delay(EPD_BUSY_CHECK_DELAY_MS);
-        timeout--;
-        if (timeout == 0) {
-            break;
-        }
-    }
-}
 
 uint16_t EPD_ReadVoltage(void) {
 #if defined(S112)
@@ -256,105 +212,4 @@ uint16_t EPD_ReadVoltage(void) {
     NRF_ADC->ENABLE = 0;
 #endif
     return (value * 3600) / (1 << 10);
-}
-
-extern epd_model_t epd_uc8176_420_bw;
-extern epd_model_t epd_uc8176_420_bwr;
-extern epd_model_t epd_uc8159_750_bw;
-extern epd_model_t epd_uc8159_750_bwr;
-extern epd_model_t epd_uc8179_750_bw;
-extern epd_model_t epd_uc8179_750_bwr;
-extern epd_model_t epd_uc8151_029_bw;
-extern epd_model_t epd_uc8151_029_bwr;
-extern epd_model_t epd_ssd1619_420_bwr;
-extern epd_model_t epd_ssd1619_420_bw;
-extern epd_model_t epd_ssd1619_016_bw;
-extern epd_model_t epd_ssd1619_016_bwr;
-extern epd_model_t epd_ssd1619_022_bw;
-extern epd_model_t epd_ssd1619_022_bwr;
-extern epd_model_t epd_ssd1619_026_bw;
-extern epd_model_t epd_ssd1619_026_bwr;
-extern epd_model_t epd_ssd1619_029_bw;
-extern epd_model_t epd_ssd1619_029_bwr;
-extern epd_model_t epd_uc8151_027_bw;
-extern epd_model_t epd_uc8151_027_bwr;
-extern epd_model_t epd_ucvar43_430_bw;
-extern epd_model_t epd_ucvar43_430_bwr;
-extern epd_model_t epd_ssd1677_750_bwr;
-extern epd_model_t epd_ssd1677_750_bw;
-extern epd_model_t epd_ssd1619_013_bw;
-extern epd_model_t epd_ssd1619_013_bwr;
-extern epd_model_t epd_ssd1619_022_lite_bw;
-extern epd_model_t epd_ssd1619_022_lite_bwr;
-extern epd_model_t epd_jd79668_420_bwry;
-extern epd_model_t epd_jd79665_750_bwry;
-extern epd_model_t epd_jd79665_583_bwry;
-
-static epd_model_t* epd_models[] = {
-    &epd_uc8176_420_bw,    &epd_uc8176_420_bwr,   &epd_uc8159_750_bw,    &epd_uc8159_750_bwr,  &epd_uc8179_750_bw,
-    &epd_uc8179_750_bwr,   &epd_uc8151_029_bw,    &epd_uc8151_029_bwr,   &epd_ssd1619_420_bwr,  &epd_ssd1619_420_bw,
-    &epd_ssd1619_016_bw,   &epd_ssd1619_016_bwr,  &epd_ssd1619_022_bw,   &epd_ssd1619_022_bwr,  &epd_ssd1619_026_bw,
-    &epd_ssd1619_026_bwr,  &epd_uc8151_027_bw,    &epd_uc8151_027_bwr,   &epd_ucvar43_430_bw,   &epd_ucvar43_430_bwr,
-    &epd_ssd1619_029_bw,   &epd_ssd1619_029_bwr,
-    &epd_ssd1619_013_bw,  &epd_ssd1619_013_bwr,
-    &epd_ssd1619_022_lite_bw, &epd_ssd1619_022_lite_bwr,
-    &epd_ssd1677_750_bwr, &epd_ssd1677_750_bw,
-    &epd_jd79668_420_bwry, &epd_jd79665_750_bwry, &epd_jd79665_583_bwry,
-};
-
-epd_model_t* epd_init(epd_model_id_t id) {
-    epd_model_t* epd = NULL;
-    for (uint8_t i = 0; i < ARRAY_SIZE(epd_models); i++) {
-        if (epd_models[i]->id == id) {
-            epd = epd_models[i];
-        }
-    }
-    if (epd == NULL) epd = epd_models[0];
-    epd->drv->init(epd);
-    return epd;
-}
-
-epd_model_id_t map_panel_ic_to_model_id(uint16_t panel_ic_type, uint8_t color_scheme) {
-    if (panel_ic_type >= 1000 && panel_ic_type <= 1999) {
-        panel_ic_type -= 999;
-    }
-    epd_color_t target_color = (color_scheme == 0) ? COLOR_BW : COLOR_BWR;
-    if (panel_ic_type >= 1 && panel_ic_type <= 31) {
-        epd_model_id_t model_id = (epd_model_id_t)panel_ic_type;
-        switch (model_id) {
-            case SSD1619_420_BW:
-            case SSD1619_420_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_420_BW : SSD1619_420_BWR;
-            case SSD1619_016_BW:
-            case SSD1619_016_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_016_BW : SSD1619_016_BWR;
-            case SSD1619_022_BW:
-            case SSD1619_022_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_022_BW : SSD1619_022_BWR;
-            case SSD1619_026_BW:
-            case SSD1619_026_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_026_BW : SSD1619_026_BWR;
-            case UC8151_027_BW:
-            case UC8151_027_BWR:
-                return (target_color == COLOR_BW) ? UC8151_027_BW : UC8151_027_BWR;
-            case UCVAR43_430_BW:
-            case UCVAR43_430_BWR:
-                return (target_color == COLOR_BW) ? UCVAR43_430_BW : UCVAR43_430_BWR;
-            case SSD1619_029_BW:
-            case SSD1619_029_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_029_BW : SSD1619_029_BWR;
-            case UC8151_029_BW:
-            case UC8151_029_BWR:
-                return (target_color == COLOR_BW) ? UC8151_029_BW : UC8151_029_BWR;
-            case SSD1619_013_BW:
-            case SSD1619_013_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_013_BW : SSD1619_013_BWR;
-            case SSD1619_022_LITE_BW:
-            case SSD1619_022_LITE_BWR:
-                return (target_color == COLOR_BW) ? SSD1619_022_LITE_BW : SSD1619_022_LITE_BWR;
-            default:
-                return model_id;
-        }
-    }
-    return UC8176_420_BW;
 }
