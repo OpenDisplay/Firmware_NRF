@@ -360,7 +360,7 @@ KEY_FILE ?= $(PROJECT_ROOT)/tools/priv.pem
 DFU_SETTINGS_HEX = $(OUTPUT_DIRECTORY)/$(TARGET)-settings.hex
 DFU_OTA_ZIP = $(OUTPUT_DIRECTORY)/$(TARGET)-ota.zip
 # Version configuration: can set MAJOR/MINOR or APP_VERSION directly
-MAJOR_VERSION ?= 1
+MAJOR_VERSION ?= 3
 MINOR_VERSION ?= 0
 # APP_VERSION: if not explicitly set, calculate from MAJOR.MINOR (as single incrementing number)
 # Format: major * 100 + minor (e.g., 1.0 = 100, 1.5 = 105, 2.0 = 200)
