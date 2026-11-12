@@ -36,7 +36,9 @@ DFU_SVC = "0000fe59-0000-1000-8000-00805f9b34fb"
 DFU_CP = "8ec90001-f315-4f60-9fb8-838830daea50"
 DFU_PKT = "8ec90002-f315-4f60-9fb8-838830daea50"
 HERE = Path(__file__).resolve().parent
-PRESETS = HERE.parent / "presets" / "drive_presets_nrf52811.json"
+PRESETS = next((p for p in (HERE / "drive_presets_nrf52811.json",
+                             HERE.parent / "presets" / "drive_presets_nrf52811.json") if p.exists()),
+               HERE / "drive_presets_nrf52811.json")
 
 # Legacy (0x00-0x7F) packet body sizes, from od_config_tlv_body_size() of this build.
 LEGACY = {0x01: 22, 0x02: 22, 0x04: 30, 0x20: 46, 0x21: 22, 0x23: 30, 0x24: 30, 0x25: 30,
