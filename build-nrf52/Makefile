@@ -37,19 +37,25 @@ endif
 
 # Source files - Application
 SRC_FILES += $(PROJECT_ROOT)/main.c
-SRC_FILES += $(PROJECT_ROOT)/config_storage.c
-SRC_FILES += $(PROJECT_ROOT)/config_parser.c
 SRC_FILES += $(PROJECT_ROOT)/led_control.c
 SRC_FILES += $(PROJECT_ROOT)/button_control.c
-SRC_FILES += $(PROJECT_ROOT)/boot_screen.c
 SRC_FILES += $(PROJECT_ROOT)/qr/qrcode.c
 
 # Source files - EPD
 # EPD_config.c removed - legacy config system replaced by config_storage.c
 SRC_FILES += $(PROJECT_ROOT)/EPD/EPD_driver.c
 SRC_FILES += $(PROJECT_ROOT)/EPD/EPD_service.c
-SRC_FILES += $(PROJECT_ROOT)/EPD/UC81xx.c
-SRC_FILES += $(PROJECT_ROOT)/EPD/SSD16xx.c
+
+# Shared OpenDisplay 3.0 chain, vendored unmodified under od/ (tools/sync_od.sh, od/SOURCE)
+OD_CORE = od_epd od_epd_cfg od_cfg_index od_display od_color od_config_store od_config_tlv \
+          od_config_asm od_advert od_cmd_spi_raw
+SRC_FILES += $(foreach f,$(OD_CORE),$(PROJECT_ROOT)/od/core/$(f).c)
+
+# This firmware's glue onto the shared chain
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_nvs.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_display.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_config.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_bootguard.c
 
 # Source files - GUI
 # GUI files removed - not used in current implementation (only MODE_PICTURE supported)
@@ -139,6 +145,10 @@ ASM_FILES += $(SDK_ROOT)/modules/nrfx/mdk/gcc_startup_nrf52811.S
 INC_FOLDERS += $(PROJECT_ROOT)
 INC_FOLDERS += $(PROJECT_ROOT)/EPD
 INC_FOLDERS += $(PROJECT_ROOT)/qr
+INC_FOLDERS += $(PROJECT_ROOT)/glue
+INC_FOLDERS += $(PROJECT_ROOT)/od/core
+INC_FOLDERS += $(PROJECT_ROOT)/od/hal
+INC_FOLDERS += $(PROJECT_ROOT)/od/protocol
 # GUI include folder removed - GUI files not used in current implementation
 # INC_FOLDERS += $(PROJECT_ROOT)/GUI
 INC_FOLDERS += $(SDK_ROOT)
@@ -206,6 +216,15 @@ CFLAGS += -DSHA_VALUE=$(shell echo '"$(SHA_VALUE)"')
 endif
 CFLAGS += -DAPP_VERSION=$(APP_VERSION)
 CFLAGS += -DS112
+# Shared-chain profile for this target (see the report for the reasoning behind each value)
+# 2000 B: one 4 KB FDS data page must hold the old and the new record during an update.
+CFLAGS += -DOD_CONFIG_MAX_SIZE=2000u
+CFLAGS += -DOD_CAP_LOG=0
+CFLAGS += -DOD_EPD_WITH_WINDOW=0
+CFLAGS += -DOD_CAP_PIPE=0 -DOD_CAP_PARTIAL=0 -DOD_CAP_DUAL_CS=0 -DOD_CAP_RXQ=0 -DOD_CAP_NFC=0
+CFLAGS += -DOD_CAP_READ_IDENT=1
+OD_CAP_SPI_RAW ?= 1
+CFLAGS += -DOD_CAP_SPI_RAW=$(OD_CAP_SPI_RAW)
 CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -D__HEAP_SIZE=8192
 CFLAGS += -D__STACK_SIZE=2048
@@ -318,7 +337,7 @@ $(OUTPUT_DIRECTORY)/sdk/%.o: $(SDK_ROOT)/%.S | $(OUTPUT_DIRECTORY)
 	@$(CC) $(ASMFLAGS) -c $< -o $@
 
 # Link
-$(OUTPUT_DIRECTORY)/$(TARGET).out: $(OBJ_FILES) | $(OUTPUT_DIRECTORY)
+$(OUTPUT_DIRECTORY)/$(TARGET).out: $(OBJ_FILES) $(CURDIR)/nrf52811_xxaa_s112.ld | $(OUTPUT_DIRECTORY)
 	@echo "Linking: $@"
 	@$(CC) $(LDFLAGS) -o $@ $(OBJ_FILES)
 	@$(SIZE) $@

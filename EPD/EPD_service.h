@@ -7,7 +7,6 @@
 #if defined(S112)
 #include "nrf_sdh_ble.h"
 #endif
-#include "EPD_driver.h"
 #include "sdk_config.h"
 #include "structs.h"
 
@@ -64,55 +63,8 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 
 #define EPD_SVC_UUID_TYPE BLE_UUID_TYPE_VENDOR_BEGIN
 
-#define CMD_CONFIG_READ    0x0040
-#define CMD_CONFIG_WRITE   0x0041
-#define CMD_CONFIG_CHUNK   0x0042
-
-#define CMD_DIRECT_WRITE_START  0x0070
-#define CMD_DIRECT_WRITE_DATA   0x0071
-#define CMD_DIRECT_WRITE_END    0x0072
-
-#define CMD_LED_ACTIVATE        0x0073
-
-#define CMD_REBOOT              0x000F
-#define CMD_FIRMWARE_VERSION    0x0043
-#define CMD_READ_MSD            0x0044
-
-#define CMD_AUTHENTICATE        0x0050
-#define CMD_ENTER_DFU           0x0051
-#define CMD_DEEP_SLEEP          0x0052
-
-#define AUTH_STATUS_CHALLENGE   0x00  // Challenge sent / success
-#define AUTH_STATUS_SUCCESS     AUTH_STATUS_CHALLENGE  // Authentication successful (same value as challenge)
-#define AUTH_STATUS_FAILED      0x01  // Authentication failed (wrong key)
-#define AUTH_STATUS_ALREADY     0x02  // Already authenticated
-#define AUTH_STATUS_NOT_CONFIG  0x03  // Encryption not configured
-#define AUTH_STATUS_RATE_LIMIT  0x04  // Rate limit exceeded
-#define AUTH_STATUS_ERROR       0xFF  // Generic error
-
-#define RESP_AUTH_REQUIRED      0xFE
-
-#define RESP_CONFIG_READ  0x40
-#define RESP_CONFIG_WRITE  0x41
-#define RESP_CONFIG_CHUNK  0x42
-#define RESP_DIRECT_WRITE_START_ACK  0x70
-#define RESP_DIRECT_WRITE_DATA_ACK   0x71
-#define RESP_DIRECT_WRITE_END_ACK    0x72
-#define RESP_DIRECT_WRITE_REFRESH_SUCCESS 0x73
-#define RESP_DIRECT_WRITE_REFRESH_TIMEOUT 0x74
-#define RESP_DIRECT_WRITE_ERROR      0xFF
-#define RESP_LED_ACTIVATE_ACK        0x73
-#define RESP_FIRMWARE_VERSION  0x43
-#define RESP_MSD_READ          0x44
-#define RESP_AUTHENTICATE      0x50
-#define RESP_ENTER_DFU         0x51
-#define RESP_DEEP_SLEEP        0x52
-
-#define CONFIG_CHUNK_SIZE 200
-#define CONFIG_CHUNK_SIZE_WITH_PREFIX 202
-#define MAX_CONFIG_CHUNKS 20
-#define MAX_RESPONSE_DATA_SIZE 100
-
+/* Opcodes, response codes and error bytes are the protocol's own. */
+#include "opendisplay_protocol.h"
 
 #if defined(S112)
 #define BLE_EPD_MAX_DATA_LEN (NRF_SDH_BLE_GATT_MAX_MTU_SIZE - 3)
@@ -121,23 +73,6 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
     (GATT_MTU_SIZE_DEFAULT - 3) /**< Maximum length of data (in bytes) that can be transmitted to the peer. */
 #endif
 
-enum EPD_CMDS {
-    EPD_CMD_SET_PINS = 0x00,     /**< set EPD pin mapping. */
-    EPD_CMD_INIT = 0x01,         /**< init EPD display driver */
-    EPD_CMD_CLEAR = 0x02,        /**< clear EPD screen */
-    EPD_CMD_SEND_COMMAND = 0x03, /**< send command to EPD */
-    EPD_CMD_SEND_DATA = 0x04,    /**< send data to EPD */
-    EPD_CMD_REFRESH = 0x05,      /**< diaplay EPD ram on screen */
-    EPD_CMD_SLEEP = 0x06,        /**< EPD enter sleep mode */
-
-    EPD_CMD_SET_TIME = 0x20,       /** < set time with unix timestamp */
-    EPD_CMD_SET_WEEK_START = 0x21, /** < set week start day (0: Sunday, 1: Monday, ...) */
-
-    EPD_CMD_SET_CONFIG = 0x90, /**< set full EPD config */
-    EPD_CMD_SYS_RESET = 0x91,  /**< MCU reset */
-    EPD_CMD_SYS_SLEEP = 0x92,  /**< MCU enter sleep mode */
-    EPD_CMD_CFG_ERASE = 0x99,  /**< Erase config and reset */
-};
 
 typedef struct {
     uint16_t service_handle; /**< Handle of EPD Service (as provided by the S110 SoftDevice). */
@@ -150,17 +85,15 @@ typedef struct {
     uint16_t max_data_len;        /**< Maximum length of data (in bytes) that can be transmitted to the peer */
     bool is_notification_enabled; /**< Variable to indicate if the peer has enabled notification of the RX
                                      characteristic.*/
-    epd_model_t* epd;             /**< current EPD model */
     struct DisplayConfig* display_config; /**< Display config from GlobalConfig (new system) */
     struct GlobalConfig* global_config; /**< Global config (for EN/LED pins) */
 } ble_epd_t;
 
-typedef struct {
-    ble_epd_t* p_epd;
-    uint32_t timestamp;
-} epd_gui_update_event_t;
-
-#define EPD_GUI_SCHD_EVENT_DATA_SIZE sizeof(epd_gui_update_event_t)
+/* Work that must not run in the BLE event handler: the refresh after DIRECT_WRITE_END and the
+ * config-read chunks that did not fit the SoftDevice's notification queue. Call from main(). */
+void ble_epd_service_run(ble_epd_t* p_epd);
+bool ble_epd_refresh_busy(void);
+#define EPD_GUI_SCHD_EVENT_DATA_SIZE 8
 
 void ble_epd_sleep_prepare(ble_epd_t* p_epd);
 
@@ -170,7 +103,6 @@ void ble_epd_on_ble_evt(ble_epd_t* p_epd, ble_evt_t* p_ble_evt);
 
 uint32_t ble_epd_string_send(ble_epd_t* p_epd, uint8_t* p_string, uint16_t length);
 
-void ble_epd_on_timer(ble_epd_t* p_epd, uint32_t timestamp, bool force_update);
 
 #endif  // EPD_BLE_H__
 

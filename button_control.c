@@ -87,14 +87,14 @@ void button_init(void) {
         }
         
         uint8_t* instancePins[8] = {
-            &input->reserved_pin_1,
-            &input->reserved_pin_2,
-            &input->reserved_pin_3,
-            &input->reserved_pin_4,
-            &input->reserved_pin_5,
-            &input->reserved_pin_6,
-            &input->reserved_pin_7,
-            &input->reserved_pin_8
+            &input->input_pin_1,
+            &input->input_pin_2,
+            &input->input_pin_3,
+            &input->input_pin_4,
+            &input->input_pin_5,
+            &input->input_pin_6,
+            &input->input_pin_7,
+            &input->input_pin_8
         };
         
         for (uint8_t pinIdx = 0; pinIdx < 8; pinIdx++) {

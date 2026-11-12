@@ -27,10 +27,8 @@
 #include "app_scheduler.h"
 #include "app_timer.h"
 #include "button_control.h"
-#include "config_parser.h"
-#include "config_storage.h"
 #include "led_control.h"
-#include "boot_screen.h"
+#include "od_nrf_glue.h"
 #include "main.h"
 #include "constants.h"
 #include "nrf_drv_gpiote.h"
@@ -90,7 +88,6 @@ static ble_uuid_t                        m_adv_uuids[] = {{BLE_UUID_EPD_SVC, \
 static uint8_t                           msd_payload[MSD_PAYLOAD_SIZE];
 static uint8_t                           mloopcounter = 0;
 uint8_t                                  rebootFlag = 1;  // Set to 1 after reboot, cleared after BLE connection (extern in main.h)
-static uint8_t                           connectionRequested = 0;  // Reserved for future features
 uint8_t dynamicreturndata[11] = {0};  // Dynamic return data blocks (bytes 2-12 in MSD payload) - extern for button_control.c
 
 BLE_EPD_DEF(m_epd);                                                                     /**< Structure to identify the EPD Service. */
@@ -119,34 +116,43 @@ static float read_chip_temperature(void) {
     return -999.0f;
 }
 
+/* ---- platform hooks for the shared chain (od_nrf_glue.h) ---- */
+void od_nrf_pump_events(void) { nrf_sdh_evts_poll(); }
+
+void od_nrf_wdt_feed_now(void) { nrf_drv_wdt_channel_feed(m_wdt_channel_id); }
+
+/* Long waits (a refresh BUSY, SPI_RAW BUSY up to 90 s) can run inside the BLE event handler,
+ * where the 1 s clock interrupt that app_feed_wdt() counts on cannot preempt. Feed directly. */
+void od_nrf_delay_ms(uint32_t ms) {
+    while (ms > 0) {
+        const uint32_t k = ms > 50 ? 50 : ms;
+        nrf_delay_ms(k);
+        ms -= k;
+        nrf_drv_wdt_channel_feed(m_wdt_channel_id);
+    }
+}
+
+/* RTC1 runs at 32768 Hz in a 24-bit counter (wraps every 512 s); the accumulator extends it.
+ * Correct as long as calls are less than 512 s apart, which every caller (a BUSY poll) is. */
+uint32_t od_nrf_now_ms(void) {
+    static uint32_t last, ms, frac;
+    const uint32_t now = app_timer_cnt_get();
+    const uint32_t d = (now - last) & 0xFFFFFF;
+    last = now;
+    frac += d * 1000u;
+    ms += frac / 32768u;
+    frac %= 32768u;
+    return ms;
+}
+
+float od_nrf_chip_temp_c(void) { return read_chip_temperature(); }
+
+uint16_t od_nrf_battery_mv(void) { return EPD_ReadVoltage(); }
+
 void updatemsdata(void) {
-    //THE msd_cid is STATIC ! 
-    uint16_t msd_cid = msd_cid = 0x2446;
-    float chip_temperature = read_chip_temperature();
-    uint16_t battery_voltage_mv = EPD_ReadVoltage();
-    uint16_t battery_voltage_10mv = battery_voltage_mv / 10;
-    if (battery_voltage_10mv > 511) {
-        battery_voltage_10mv = 511;
-    }
-    int16_t temp_encoded = (int16_t)((chip_temperature + 40.0f) * 2.0f);
-    if (temp_encoded < 0) {
-        temp_encoded = 0;  // Clamp to minimum (-40°C)
-    } else if (temp_encoded > 255) {
-        temp_encoded = 255;  // Clamp to maximum (+87.5°C)
-    }
-    uint8_t temperature_byte = (uint8_t)temp_encoded;
-    uint8_t battery_voltage_low_byte = (uint8_t)(battery_voltage_10mv & 0xFF);
-    uint8_t status_byte = ((battery_voltage_10mv >> 8) & 0x01) |
-                          ((rebootFlag & 0x01) << 1) |
-                          ((connectionRequested & 0x01) << 2) |
-                          ((mloopcounter & 0x0F) << 4);
-    memset(msd_payload, 0, sizeof(msd_payload));
-    msd_payload[0] = (uint8_t)(msd_cid & 0xFF);
-    msd_payload[1] = (uint8_t)((msd_cid >> 8) & 0xFF);
-    memcpy(&msd_payload[2], dynamicreturndata, sizeof(dynamicreturndata));
-    msd_payload[13] = temperature_byte;      // Temperature with 0.5°C accuracy (-40°C to +87.5°C)
-    msd_payload[14] = battery_voltage_low_byte; // Battery voltage lower 8 bits (10mV steps)
-    msd_payload[15] = status_byte;            // Battery voltage MSB + Reboot flag + Connection requested + RFU + mloopcounter
+    /* od/core/od_advert.c encodes the 16 bytes; the glue supplies the 0xFF x 11 rule for a device
+     * with no drivable display (protocol 2.2 / SECURITY_V2 5.3.2). */
+    od_nrf_msd(msd_payload, mloopcounter, rebootFlag != 0);
     mloopcounter = (uint8_t)((mloopcounter + 1) & 0x0F);
 }
 
@@ -267,7 +273,6 @@ static void clock_timer_timeout_handler(void* p_context) {
 
     m_timestamp++;
 
-    ble_epd_on_timer(&m_epd, m_timestamp, false);
 }
 
 static void scheduler_init(void) { APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE); }
@@ -712,6 +717,10 @@ static void idle_state_handle(void) {
     } else {
         first_update = true;
     }
+    /* Thirty minutes up counts as healthy for the DFU strand guard. */
+    if (od_nrf_now_ms() >= 1800000u) {
+        od_nrf_bootguard_served();
+    }
     process_button_events();
     nrf_pwr_mgmt_run();
 }
@@ -720,6 +729,7 @@ void wdt_event_handler(void) {
 }
 
 int main(void) {
+    od_nrf_bootguard_boot();   /* DFU strand guard: counts boots that never serve a GATT write */
     m_resetreas = NRF_POWER->RESETREAS;
     NRF_POWER->RESETREAS |= NRF_POWER->RESETREAS;
     nrf_drv_wdt_config_t config = NRF_DRV_WDT_DEAFULT_CONFIG;
@@ -737,9 +747,7 @@ int main(void) {
 #else
     ble_options_set();
 #endif
-    bool config_loaded = loadGlobalConfig(&globalConfig);
-    if (!config_loaded) {
-    }
+    (void)od_nrf_config_load(&globalConfig);
     updatemsdata();
     led_init();
     button_init();
@@ -754,27 +762,11 @@ int main(void) {
     conn_params_init();
     application_timers_start();
     advertising_start();
-    if (m_epd.display_config != NULL && m_epd.display_config->panel_ic_type != 0) {
-        EPD_GPIO_Load_DisplayConfig(m_epd.display_config, m_epd.global_config);
-        epd_model_id_t model_id = map_panel_ic_to_model_id(m_epd.display_config->panel_ic_type, m_epd.display_config->color_scheme);
-        EPD_GPIO_Init();
-        m_epd.epd = epd_init(model_id);
-        if (m_epd.epd) {
-            if ((m_epd.display_config->transmission_modes & (1 << 7)) != 0) {
-                m_epd.epd->drv->clear(m_epd.epd, true);
-            }
-            (void)boot_screen_render(m_epd.epd, &globalConfig);
-            m_epd.epd->drv->sleep(m_epd.epd);
-            nrf_delay_ms(EPD_SLEEP_DELAY_MS);
-            EPD_GPIO_Uninit();
-        } else {
-            EPD_GPIO_Uninit();
-        }
-    } else {
-    }
-
+    /* Config-driven: drawn only when the stored config carries drive packets for display 0. */
+    od_nrf_boot_screen();
     for (;;) {
         app_sched_execute();
+        ble_epd_service_run(&m_epd);
         idle_state_handle();
     }
 }
