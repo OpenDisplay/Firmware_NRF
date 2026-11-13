@@ -109,7 +109,7 @@ The firmware implements the OpenDisplay BLE protocol standard. Key commands incl
 ### Deep sleep wake
 
 `0x0053` DEEP_SLEEP enters System OFF. Every configured button (0x25) wakes the tag at its pressed level, and so does the NFC field-detect pin. After such a wake:
-- the boot screen is not redrawn, so the panel keeps its image (the bootloader clears RESETREAS.OFF, so the app marks System OFF in bit 2 of GPREGRET2 before it goes down);
+- the boot screen is drawn, as after any start;
 - the button that woke the tag (from the GPIO LATCH register, or still held) is advertised as its first press, so the host sees which button woke the tag.
 
 ### NFC

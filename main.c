@@ -293,18 +293,8 @@ static void application_timers_start(void) {
     APP_ERROR_CHECK(app_timer_start(m_clock_timer_id, CLOCK_TIMER_INTERVAL, NULL));
 }
 
-/* Wake-from-System-OFF marker in GPREGRET2 (retained through System OFF). The bootloader clears
- * RESETREAS.OFF before the app starts and only acts on GPREGRET2 values carrying its 0xA8 magic,
- * so a lone bit 2 reaches the app untouched. */
-#define OD_WAKE_MARK 0x04u
-
 /* Everything that may wake the tag from System OFF, and the external flash parked for it. */
 static void wake_sources_arm(void) {
-    if (nrf_sdh_is_enabled()) {
-        (void)sd_power_gpregret_set(1, OD_WAKE_MARK);
-    } else {
-        NRF_POWER->GPREGRET2 |= OD_WAKE_MARK;
-    }
     button_sleep_arm();
 #if OD_CAP_NFC
     od_nrf_nfc_sleep_arm();
@@ -768,10 +758,6 @@ int main(void) {
     od_nrf_bootguard_boot();   /* DFU strand guard: counts boots that never serve a GATT write */
     m_resetreas = NRF_POWER->RESETREAS;
     NRF_POWER->RESETREAS |= NRF_POWER->RESETREAS;
-    if ((NRF_POWER->GPREGRET2 & OD_WAKE_MARK) != 0u) {
-        m_resetreas |= POWER_RESETREAS_OFF_Msk;
-        NRF_POWER->GPREGRET2 &= ~OD_WAKE_MARK;
-    }
     nrf_drv_wdt_config_t config = NRF_DRV_WDT_DEAFULT_CONFIG;
     APP_ERROR_CHECK(nrf_drv_wdt_init(&config, wdt_event_handler));
     APP_ERROR_CHECK(nrf_drv_wdt_channel_alloc(&m_wdt_channel_id));
@@ -806,11 +792,9 @@ int main(void) {
     conn_params_init();
     application_timers_start();
     advertising_start();
-    /* Config-driven: drawn only when the stored config carries drive packets for display 0. Not
-     * after a wake from System OFF (a button or an NFC field): the panel keeps the last image. */
-    if ((m_resetreas & POWER_RESETREAS_OFF_Msk) == 0u) {
-        od_nrf_boot_screen();
-    }
+    /* Config-driven: drawn only when the stored config carries drive packets for display 0. Also
+     * after a wake from System OFF (a button or an NFC field). */
+    od_nrf_boot_screen();
     for (;;) {
         app_sched_execute();
         ble_epd_service_run(&m_epd);
