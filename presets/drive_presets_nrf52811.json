@@ -31,6 +31,7 @@
   "equivalent": "replays token-identical to the 2.x driver after the transforms",
   "extracted": "replays token-identical to an op list that was not compiled",
   "corrected": "replays token-identical to its source with the listed deviations; the uncorrected packets are under alternatives",
+  "glass": "corrected, and the corrected packets were checked on a real panel (see verified)",
   "blocked": "cannot be expressed on this target"
  },
  "names": {
@@ -166,7 +167,6 @@
    "name": "SSD1619_420_BWR",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -230,12 +230,6 @@
     "nrf52811": true
    },
    "deviations": [
-    {
-     "cmd": "0x21",
-     "from": "08 00",
-     "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
     {
      "cmd": "0x21",
      "from": "08 00",
@@ -351,7 +345,6 @@
    "name": "SSD1619_420_BW",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -415,12 +408,6 @@
     "nrf52811": true
    },
    "deviations": [
-    {
-     "cmd": "0x21",
-     "from": "48 00",
-     "to": "40 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
     {
      "cmd": "0x21",
      "from": "48 00",
@@ -834,7 +821,6 @@
    "name": "SSD1677_750_HD_BW",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -903,12 +889,6 @@
      "from": "48 00",
      "to": "40 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "48 00",
-     "to": "40 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -951,7 +931,6 @@
    "aliases": [],
    "notes": [
     "T1: plane 1 inversion moved into 0x21 RED RAM option (XOR 0x80); datasheet-derived, needs a glass check",
-    "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -1015,12 +994,6 @@
     "nrf52811": true
    },
    "deviations": [
-    {
-     "cmd": "0x21",
-     "from": "88 00",
-     "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
     {
      "cmd": "0x21",
      "from": "88 00",
@@ -1345,7 +1318,6 @@
    "name": "SSD1619_029_BW",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -1414,12 +1386,6 @@
      "from": "48 00",
      "to": "40 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "48 00",
-     "to": "40 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -1462,8 +1428,10 @@
    "aliases": [],
    "notes": [
     "T1: plane 1 inversion moved into 0x21 RED RAM option (XOR 0x80); datasheet-derived, needs a glass check",
-    "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
-    "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
+    "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass",
+    "deliberately differs from its source: 0x11 01 -> 03 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x45 80 01 00 00 -> 00 00 7f 01 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x4F 7f 01 -> 00 00 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 168,
@@ -1476,8 +1444,8 @@
     "model_id": 17
    },
    "color_scheme": 1,
-   "status": "corrected",
-   "verified": "untested",
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 2.9in SSD BWR tags (2.x 1016 and a 1001-provisioned one)",
    "blocked_on": [],
    "modes": [
     {
@@ -1506,10 +1474,10 @@
     {
      "id": 174,
      "number": 0,
-     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321000002110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f010124000302110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0101260003032100000222f70120000102110103440115024e01054580010000034f7f0100010000"
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f00000124000302110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000001260003032100000222f70120000102110303440115024e01054500007f01034f000000010000"
     }
    ],
-   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321000002110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f010124000302110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0101260003032100000222f70120000102110103440115024e01054580010000034f7f0100010000",
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f00000124000302110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000001260003032100000222f70120000102110303440115024e01054500007f01034f000000010000",
    "drive_bytes": 233,
    "equivalence": {
     "0": {
@@ -1533,10 +1501,22 @@
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     },
     {
-     "cmd": "0x21",
-     "from": "88 00",
+     "cmd": "0x11",
+     "from": "01",
+     "to": "03",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x45",
+     "from": "80 01 00 00",
+     "to": "00 00 7f 01",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x4F",
+     "from": "7f 01",
      "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
     }
    ],
    "alternatives": [
@@ -1580,7 +1560,6 @@
    "name": "SSD1619_016_BW",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -1649,12 +1628,6 @@
      "from": "48 00",
      "to": "40 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "48 00",
-     "to": "40 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -1696,7 +1669,6 @@
    "name": "SSD1619_016_BWR",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -1765,12 +1737,6 @@
      "from": "08 00",
      "to": "00 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "08 00",
-     "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -1812,7 +1778,6 @@
    "name": "SSD1619_022_BW",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -1881,12 +1846,6 @@
      "from": "48 00",
      "to": "40 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "48 00",
-     "to": "40 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -1928,7 +1887,6 @@
    "name": "SSD1619_022_BWR",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -1997,12 +1955,6 @@
      "from": "08 00",
      "to": "00 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "08 00",
-     "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -2044,7 +1996,6 @@
    "name": "SSD1619_026_BW",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 48 00 -> 40 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -2113,12 +2064,6 @@
      "from": "48 00",
      "to": "40 00",
      "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
-    {
-     "cmd": "0x21",
-     "from": "48 00",
-     "to": "40 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
     }
    ],
    "alternatives": [
@@ -2161,7 +2106,6 @@
    "aliases": [],
    "notes": [
     "T1: plane 1 inversion moved into 0x21 RED RAM option (XOR 0x80); datasheet-derived, needs a glass check",
-    "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -2225,12 +2169,6 @@
     "nrf52811": true
    },
    "deviations": [
-    {
-     "cmd": "0x21",
-     "from": "88 00",
-     "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
     {
      "cmd": "0x21",
      "from": "88 00",
@@ -2829,7 +2767,6 @@
    "aliases": [],
    "notes": [
     "same drive as 0xE002 (SSD1619_420_BWR) with colour scheme 2; the same 2.x panel_ic_type 1001: pick by the panel's colour",
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
     "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
    ],
    "source": "2.x C driver, compiled and captured",
@@ -2891,12 +2828,6 @@
     "nrf52811": true
    },
    "deviations": [
-    {
-     "cmd": "0x21",
-     "from": "08 00",
-     "to": "00 00",
-     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
-    },
     {
      "cmd": "0x21",
      "from": "08 00",
@@ -3017,7 +2948,10 @@
    "notes": [
     "extracted, not cross-checked: op list transcribed, not compiled",
     "T1: plane 0 inversion moved into 0x21 BW RAM option (XOR 0x08); datasheet-derived, needs a glass check",
-    "T5: the hardware reset before the sleep commands is left out (the panel is awake after a refresh)"
+    "T5: the hardware reset before the sleep commands is left out (the panel is awake after a refresh)",
+    "deliberately differs from its source: 0x11 01 -> 03 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x45 28 01 00 00 -> 00 00 27 01 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x4F 27 01 -> 00 00 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass"
    ],
    "source": "op list (extracted, not cross-checked)",
    "width": 160,
@@ -3028,8 +2962,8 @@
     "pixel_height": 296
    },
    "color_scheme": 1,
-   "status": "extracted",
-   "verified": "extracted",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 2.2in EL022H3WRA 160x296 tag (provisioned as 2.x 1020)",
    "blocked_on": [],
    "modes": [
     {
@@ -3058,10 +2992,10 @@
     {
      "id": 174,
      "number": 0,
-     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110105452801000003440114023c0502188003210000024e01034f270101240003024e01034f2701012600030222f7012000010000"
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110305450000270103440114023c0502188003210000024e01034f000001240003024e01034f0000012600030222f7012000010000"
     }
    ],
-   "framed_hex": "00b11600000100ffff000000010203010901130001021003000000ae6800000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110105452801000003440114023c0502188003210000024e01034f270101240003024e01034f2701012600030222f7012000010000",
+   "framed_hex": "00b11600000100ffff000000010203010901130001021003000000ae6800000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110305450000270103440114023c0502188003210000024e01034f000001240003024e01034f0000012600030222f7012000010000",
    "drive_bytes": 134,
    "equivalence": {
     "0": {
@@ -3076,7 +3010,64 @@
    },
    "fits_target": {
     "nrf52811": true
-   }
+   },
+   "deviations": [
+    {
+     "cmd": "0x11",
+     "from": "01",
+     "to": "03",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x45",
+     "from": "28 01 00 00",
+     "to": "00 00 27 01",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x4F",
+     "from": "27 01",
+     "to": "00 00",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "extracted",
+     "verified": "extracted",
+     "notes": [
+      "extracted, not cross-checked: op list transcribed, not compiled",
+      "T1: plane 0 inversion moved into 0x21 BW RAM option (XOR 0x08); datasheet-derived, needs a glass check",
+      "T5: the hardware reset before the sleep commands is left out (the panel is awake after a refresh)"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff0000000102030109011300010210030000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110105452801000003440114023c0502188003210000024e01034f270101240003024e01034f2701012600030222f7012000010000"
+      }
+     ],
+     "framed_hex": "00b11600000100ffff000000010203010901130001021003000000ae6800000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110105452801000003440114023c0502188003210000024e01034f270101240003024e01034f2701012600030222f7012000010000",
+     "drive_bytes": 134,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (op list (extracted, not cross-checked))"
+    }
+   ]
   },
   "0xE102": {
    "panel_ic_type": 57602,

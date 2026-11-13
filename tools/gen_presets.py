@@ -18,7 +18,8 @@
 4. A few presets deliberately leave their source: DEVIATIONS below. Such a preset is "corrected":
    its packets replay token-identical to the corrected steps, the change is listed under
    "deviations", and the uncorrected packets stay under "alternatives" with their own
-   equivalence result. Nothing here is forced to match the 2.x driver.
+   equivalence result. Nothing here is forced to match the 2.x driver. A corrected preset
+   that was checked on a real panel (GLASS) is "glass".
 
 --extra takes models described as op lists (cmd / delay_ms / wait_busy / reset / pixel_data /
 data). Those were not compiled from source, so they are marked "extracted, not cross-checked":
@@ -270,8 +271,12 @@ _UC8179_POL = ("UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the 
 _UC8151_SHL = ("UC8151 scan direction: PSR SHL cleared (03 instead of 07), the orientation of "
                "0xE019, which is correct on glass; the source value mirrors left-right")
 
-# key -> [(cmd, byte index, new value, reason)]; every occurrence of cmd is changed.
-DEVIATIONS: dict[int, list[tuple[int, int, int, str]]] = {
+_SSD_YFLIP = ("SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): "
+              "the source drew the wire image mirrored and rotated 180 degrees, a vertical flip")
+
+# key -> [(cmd, byte index, new value, reason)]; every occurrence of cmd is changed. A bytes value
+# replaces the data from that index on.
+DEVIATIONS: dict[int, list[tuple[int, int, int | bytes, str]]] = {
     **{k: [(0x21, 0, 0x00, _SSD_POL)]
        for k in (0xE002, 0xE00B, 0xE011, 0xE013, 0xE015, 0xE017, 0xE020)},
     **{k: [(0x21, 0, 0x40, _SSD_POL)]
@@ -280,6 +285,18 @@ DEVIATIONS: dict[int, list[tuple[int, int, int, str]]] = {
 }
 # E007: CDI 30 07 -> 31 07 (data byte 0 is BDZ/BDV/N2OCP/DDX).
 DEVIATIONS[0xE007] = [(0x50, 0, 0x31, _UC8179_POL)]
+# Y flip: rows 0..H-1 increasing instead of H..0 decreasing (the source's 0x45 start is H, not H-1).
+DEVIATIONS[0xE011] += [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("00007f01"), _SSD_YFLIP),
+                       (0x4F, 0, bytes.fromhex("0000"), _SSD_YFLIP)]
+DEVIATIONS[0xE101] = [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("00002701"), _SSD_YFLIP),
+                      (0x4F, 0, bytes.fromhex("0000"), _SSD_YFLIP)]
+
+# Corrected presets checked on glass with the wire test image (upright, not mirrored, colours
+# right): key -> where. Their status is "glass".
+GLASS: dict[int, str] = {
+    0xE011: "glass 2026-11-13: two 2.9in SSD BWR tags (2.x 1016 and a 1001-provisioned one)",
+    0xE101: "glass 2026-11-13: 2.2in EL022H3WRA 160x296 tag (provisioned as 2.x 1020)",
+}
 
 
 def deviate(key: int, steps: list[tuple]) -> tuple[list[tuple], list[dict]]:
@@ -292,8 +309,12 @@ def deviate(key: int, steps: list[tuple]) -> tuple[list[tuple], list[dict]]:
             raise SystemExit(f"0x{key:04X}: deviation on cmd 0x{cmd:02X} matches no step")
         for i in hits:
             c = out[i]
-            new = bytes(c[2][:idx]) + bytes([val]) + bytes(c[2][idx + 1:])
-            if new != c[2]:
+            v = val if isinstance(val, bytes) else bytes([val])
+            if len(c[2]) < idx + len(v):
+                raise SystemExit(f"0x{key:04X}: deviation on cmd 0x{cmd:02X} is longer than its data")
+            new = bytes(c[2][:idx]) + v + bytes(c[2][idx + len(v):])
+            if new != c[2] and not any(d["cmd"] == f"0x{cmd:02X}" and d["from"] == c[2].hex(" ")
+                                       and d["to"] == new.hex(" ") for d in done):
                 done.append({"cmd": f"0x{cmd:02X}", "from": c[2].hex(" "), "to": new.hex(" "),
                              "reason": why})
             out[i] = ("cmd", c[1], new)
@@ -320,9 +341,13 @@ def build_entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
         # source, on purpose: that is what "corrected" says.
         e["status"] = "corrected" if e["status"] in ("equivalent", "extracted") else e["status"]
         e["verified"] = "untested"
+        if key in GLASS and e["status"] == "corrected":
+            e["status"] = "glass"
+            e["verified"] = GLASS[key]
     e["deviations"] = done
+    glass_note = "Checked on glass" if e["status"] == "glass" else "Needs a glass check"
     e["notes"] = e["notes"] + [f"deliberately differs from its source: {d['cmd']} "
-                               f"{d['from']} -> {d['to']} ({d['reason']}). Needs a glass check"
+                               f"{d['from']} -> {d['to']} ({d['reason']}). {glass_note}"
                                for d in done]
     e["alternatives"] = [{k: alt[k] for k in ("status", "verified", "notes", "packets",
                                               "framed_hex", "drive_bytes", "equivalence")}
@@ -600,6 +625,8 @@ def main() -> int:
             "extracted": "replays token-identical to an op list that was not compiled",
             "corrected": "replays token-identical to its source with the listed deviations; "
                          "the uncorrected packets are under alternatives",
+            "glass": "corrected, and the corrected packets were checked on a real panel "
+                     "(see verified)",
             "blocked": "cannot be expressed on this target",
         },
         "names": {e["name"]: k for k, e in panels.items()},
