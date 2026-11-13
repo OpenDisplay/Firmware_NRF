@@ -21,7 +21,6 @@ static uint32_t EPD_CS_PIN = 9;
 static uint32_t EPD_DC_PIN = 10;
 static uint32_t EPD_RST_PIN = 11;
 static uint32_t EPD_BUSY_PIN = 12;
-static uint32_t EPD_BS_PIN = 13;
 static uint32_t EPD_EN_PIN = 0xFF;
 
 #define SPI_INSTANCE 0                                               /**< SPI instance index. */
@@ -68,7 +67,6 @@ void EPD_GPIO_Load_DisplayConfig(struct DisplayConfig* cfg, struct GlobalConfig*
     EPD_DC_PIN = cfg->dc_pin;
     EPD_RST_PIN = cfg->reset_pin;
     EPD_BUSY_PIN = cfg->busy_pin;
-    EPD_BS_PIN = 13;
     if (globalCfg != NULL && globalCfg->system_config.pwr_pin != 0xFF) {
         EPD_EN_PIN = globalCfg->system_config.pwr_pin;
     } else {
@@ -94,10 +92,6 @@ void EPD_GPIO_Init(void) {
     APP_ERROR_CHECK(nrf_drv_spi_init(&spi, &spi_config, NULL));
 #endif
 
-    if (EPD_BS_PIN != 0xFF) {
-        pinMode(EPD_BS_PIN, OUTPUT);
-        digitalWrite(EPD_BS_PIN, LOW);
-    }
     if (EPD_EN_PIN != 0xFF) {
         pinMode(EPD_EN_PIN, OUTPUT);
         digitalWrite(EPD_EN_PIN, HIGH);
@@ -125,7 +119,6 @@ void EPD_GPIO_Uninit(void) {
     pinMode(EPD_DC_PIN, DEFAULT);
     pinMode(EPD_RST_PIN, DEFAULT);
     pinMode(EPD_BUSY_PIN, DEFAULT);
-    pinMode(EPD_BS_PIN, DEFAULT);
     pinMode(EPD_EN_PIN, DEFAULT);
 }
 
