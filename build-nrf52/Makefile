@@ -310,17 +310,21 @@ $(OUTPUT_DIRECTORY):
 	@mkdir -p $(OUTPUT_DIRECTORY)/GUI
 	@mkdir -p $(OUTPUT_DIRECTORY)/sdk
 
-# Compile project C files
+# Compile project C files. -MMD -MP writes a .d file next to each object, so an object is rebuilt
+# when a header it includes changes (a struct layout change in structs.h otherwise leaves stale
+# objects that read the old field offsets).
 $(OUTPUT_DIRECTORY)/%.o: $(PROJECT_ROOT)/%.c | $(OUTPUT_DIRECTORY)
 	@echo "Compiling: $<"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Compile SDK C files
 $(OUTPUT_DIRECTORY)/sdk/%.o: $(SDK_ROOT)/%.c | $(OUTPUT_DIRECTORY)
 	@echo "Compiling: $<"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(OBJ_FILES:.o=.d)
 
 # Compile project assembly files
 $(OUTPUT_DIRECTORY)/%.o: $(PROJECT_ROOT)/%.s | $(OUTPUT_DIRECTORY)
