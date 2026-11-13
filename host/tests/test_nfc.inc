@@ -237,6 +237,24 @@ static void test_nfc_field_detect(void)
     CHECK(dynamicreturndata[10] == 0x05); /* tap 2 */
     g_fd_level = 0;
     (void)od_nrf_nfc_process();
+    /* debounce: a change inside the window waits, and is taken once the window has passed */
+    {
+        struct NfcConfig *c = &globalConfig.nfc_configs[0];
+        c->field_detect_debounce_ms = 200;
+        od_nrf_nfc_init(&globalConfig);
+        g_now += 1000;
+        g_fd_level = 1;
+        CHECK(od_nrf_nfc_process() && dynamicreturndata[10] == 0x03);
+        g_now += 50;
+        g_fd_level = 0;
+        CHECK(!od_nrf_nfc_process() && dynamicreturndata[10] == 0x03);   /* held */
+        g_now += 50;
+        g_fd_level = 1;
+        CHECK(!od_nrf_nfc_process());                                     /* back: no change */
+        g_fd_level = 0;
+        g_now += 200;
+        CHECK(od_nrf_nfc_process() && dynamicreturndata[10] == 0x02);    /* taken late */
+    }
     /* mode 0: no field detect */
     nfc_config(OD_NFC_IC_NTAG_I2C, 0, 1);
     g_fd_level = 1;

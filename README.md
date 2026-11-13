@@ -117,6 +117,7 @@ The firmware implements the OpenDisplay BLE protocol standard. Key commands incl
 - Field detect: `field_detect_mode` 1 polls the pin and 2 adds a pin interrupt. Each active edge increments a 7-bit counter, and `dynamicreturndata[adv_button_byte_index]` = state | counter << 1 is advertised at once.
   - The pull follows the active level: pull-up when active low.
   - Before System OFF the pin is armed as a wake source.
+  - A phone switches its field on and off many times while it reads; `field_detect_debounce_ms` 255 counts about one tap per touch. A change held back by the debounce is taken on a later pass, not lost.
 
 See the [OpenDisplay protocol documentation](https://opendisplay.org/) for complete protocol specifications.
 

@@ -715,7 +715,13 @@ bool od_nrf_nfc_process(void)
         }
         s.fd_irq = false;
     }
-    return fd_refresh(false);
+    if (fd_refresh(false)) {
+        return true;
+    }
+    if (fd_level() != s.fd_state) {
+        s.fd_irq = true;   /* held back by the debounce: look again on the next pass */
+    }
+    return false;
 }
 
 void od_nrf_nfc_sleep_arm(void)
