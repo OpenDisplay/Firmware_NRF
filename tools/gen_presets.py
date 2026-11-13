@@ -319,8 +319,9 @@ GLASS: dict[int, str] = {
     0xE020: "glass 2026-11-13: 4.2in SSD BWY tag",
     0xE011: "glass 2026-11-13: two 2.9in SSD BWR tags (2.x 1016 and a 1001-provisioned one)",
     0xE101: "glass 2026-11-13: 2.2in EL022H3WRA 160x296 tag (provisioned as 2.x 1020)",
-    0xE01B: "glass 2026-11-13: 4.3in UCVAR43 BWR tag (orientation; the red greys a little after "
-            "the refresh, with and without the PSR)",
+    0xE01B: "glass 2026-11-13: two 4.3in UCVAR43 BWR tags (orientation; on one the red greys a "
+            "little after the refresh, with and without the PSR)",
+    0xE007: "glass 2026-11-13: 7.4in UC8179 BWR 800x480 tag (CDI 0x31 polarity fix confirmed)",
 }
 
 

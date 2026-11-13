@@ -592,7 +592,7 @@
    "aliases": [],
    "notes": [
     "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms",
-    "deliberately differs from its source: 0x50 30 07 -> 31 07 (UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the wire's convention; the source value inverted the BW plane). Needs a glass check"
+    "deliberately differs from its source: 0x50 30 07 -> 31 07 (UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the wire's convention; the source value inverted the BW plane). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 800,
@@ -605,8 +605,8 @@
     "model_id": 7
    },
    "color_scheme": 1,
-   "status": "corrected",
-   "verified": "untested",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 7.4in UC8179 BWR 800x480 tag (CDI 0x31 polarity fix confirmed)",
    "blocked_on": [],
    "modes": [
     {
@@ -2485,7 +2485,7 @@
    },
    "color_scheme": 1,
    "status": "glass",
-   "verified": "glass 2026-11-13: 4.3in UCVAR43 BWR tag (orientation; the red greys a little after the refresh, with and without the PSR)",
+   "verified": "glass 2026-11-13: two 4.3in UCVAR43 BWR tags (orientation; on one the red greys a little after the refresh, with and without the PSR)",
    "blocked_on": [],
    "modes": [
     {
