@@ -5,6 +5,7 @@
  * main() (ble_epd_service_run): a refresh takes seconds, and while it runs this handler keeps
  * answering, refusing what would disturb the panel (START: PANEL_BUSY, config writes: BUSY). */
 #include "EPD_service.h"
+#include "od_nrf_build_id.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -393,26 +394,12 @@ static void handle_config_read(void)
 
 static void handle_firmware_version(void)
 {
-    uint8_t major = 0, minor = 0;
-    const char *v = BUILD_VERSION;
-    const char *sha = SHA_STRING;
+    static const char sha[] = OD_NRF_FW_SHA;
     uint8_t r[2 + 3 + 40];
     uint16_t n = 0;
-    uint8_t sl = 0;
+    const uint8_t sl = (uint8_t)(sizeof sha - 1u > 40u ? 40u : sizeof sha - 1u);
+    const uint8_t major = OD_NRF_FW_MAJOR, minor = OD_NRF_FW_MINOR;
 
-    major = (uint8_t)atoi(v);
-    const char *dot = strchr(v, '.');
-    if (dot != NULL && dot[1] != '\0') {
-        minor = (uint8_t)atoi(dot + 1);
-    }
-    if (major == 0u && minor == 0u) {
-        major = (APP_VERSION >> 8) & 0xFFu;
-        minor = APP_VERSION & 0xFFu;
-    }
-    sl = (uint8_t)strlen(sha);
-    if (sl > 40u) {
-        sl = 40u;
-    }
     r[n++] = RESP_ACK;
     r[n++] = RESP_FIRMWARE_VERSION;
     r[n++] = major;

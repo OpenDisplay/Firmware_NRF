@@ -127,11 +127,14 @@ make ENABLE_RTT=1
 
 ### Versioning
 
-Firmware version can be set during build:
+The version is set once, in `build-nrf52/Makefile` (`MAJOR_VERSION`, `MINOR_VERSION`, `PATCH_VERSION`), and the
+git short SHA of the tree is detected at build time (with `-dirty` for uncommitted changes). Both go into the
+generated `_build/od_nrf_build_id.h`, which FIRMWARE_VERSION (0x0043) and the boot screen ("FW:N 3.0.0") read.
+They can be overridden:
 
 ```bash
 cd build-nrf52
-make MAJOR_VERSION=2 MINOR_VERSION=5 SHA_VALUE=abc123def456
+make MAJOR_VERSION=3 MINOR_VERSION=1 PATCH_VERSION=2 SHA=abc1234
 ```
 
 ## License

@@ -10,11 +10,14 @@
  * upload without and with drive packets through a refresh, SPI_RAW, the oversize-frame NACK,
  * the boot guard, and config storage across a power cut at every flash step. */
 #include <setjmp.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "EPD_service.h"
+#include "od_nrf_build_id.h"
 #include "fds_sim.h"
 #include "main.h"
 #include "od_advert.h"
@@ -268,6 +271,11 @@ static void test_opcode_table(void)
     CHECK(LAST(0xFF, 0x52, 0x00, 0x00));
     tx(CMD_FIRMWARE_VERSION, NULL, 0);
     CHECK(g_rx[g_nrx - 1][0] == 0x00 && g_rx[g_nrx - 1][1] == 0x43 && g_rx[g_nrx - 1][2] == 3);
+    /* [00][43][major][minor][len][sha]: the build's version and git SHA, not a placeholder */
+    CHECK(g_rx[g_nrx - 1][2] == OD_NRF_FW_MAJOR && g_rx[g_nrx - 1][3] == OD_NRF_FW_MINOR &&
+          g_rx[g_nrx - 1][4] == strlen(OD_NRF_FW_SHA) &&
+          g_rx_len[g_nrx - 1] == 5u + strlen(OD_NRF_FW_SHA) &&
+          memcmp(&g_rx[g_nrx - 1][5], OD_NRF_FW_SHA, strlen(OD_NRF_FW_SHA)) == 0);
     tx(CMD_READ_MSD, NULL, 0);
     CHECK(g_rx_len[g_nrx - 1] == 18 && g_rx[g_nrx - 1][1] == RESP_MSD_READ);
     {
@@ -386,6 +394,29 @@ static void test_upload(void)
     CHECK(LAST(0x00, 0x73));
     if (g_bus) fclose(g_bus);
     g_bus = NULL;
+}
+
+/* The boot screen of the drivable config: drawn in full (BOOT_LOG records its panel bus). */
+static void test_boot_screen(void)
+{
+    long bytes = 0;
+    char ln[1024];
+
+    g_busy_level = PRESET_IDLE;
+    g_bus = tmpfile();
+    od_nrf_boot_screen();
+    rewind(g_bus);
+    {
+        FILE *keep = getenv("BOOT_LOG") ? fopen(getenv("BOOT_LOG"), "w") : NULL;
+        while (fgets(ln, sizeof ln, g_bus)) {
+            if (ln[0] == 'D') bytes += (long)(strlen(ln) - 3u) / 2;
+            if (keep) fputs(ln, keep);
+        }
+        if (keep) fclose(keep);
+    }
+    fclose(g_bus);
+    g_bus = NULL;
+    CHECK(bytes >= (long)PRESET_FRAME_BYTES);
 }
 
 static void test_config_rules(void)
@@ -600,8 +631,21 @@ static void test_power_cuts(void)
     CHECK(fds_sim_valid_records() == 1);
 }
 
+/* The boot screen reads the device id from FICR (0x10000000): give the host a page there. */
+static void map_ficr(void)
+{
+    void *p = mmap((void *)NRF_FICR_BASE, 4096, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+    if (p != (void *)NRF_FICR_BASE) {
+        fprintf(stderr, "cannot map FICR\n");
+        exit(2);
+    }
+    ((volatile uint32_t *)p)[(offsetof(NRF_FICR_Type, DEVICEID) / 4u) + 1u] = 0x00D5AAADu;
+}
+
 int main(void)
 {
+    map_ficr();
     fds_sim_wipe();
     ble_epd_init(&m_epd);
     reboot();
@@ -610,6 +654,7 @@ int main(void)
     test_unconfigured();
     test_no_drive_packets();
     test_upload();
+    test_boot_screen();
     test_config_rules();
     test_spi_raw();
     test_bootguard();

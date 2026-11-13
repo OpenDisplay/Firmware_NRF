@@ -17,6 +17,7 @@
 #include "od_display_app.h"
 #include "od_drive_app.h"
 #include "od_epd_cfg.h"
+#include "od_nrf_build_id.h"
 #include "od_nrf_glue.h"
 #include "od_spi_raw_app.h"
 #include "opendisplay_protocol.h"
@@ -278,6 +279,7 @@ static const glyph_t FONT5X7[] = {
     {'4', {0x18, 0x14, 0x12, 0x7F, 0x10}}, {'5', {0x2F, 0x49, 0x49, 0x49, 0x31}},
     {'6', {0x3E, 0x49, 0x49, 0x49, 0x32}}, {'7', {0x01, 0x71, 0x09, 0x05, 0x03}},
     {'8', {0x36, 0x49, 0x49, 0x49, 0x36}}, {'9', {0x26, 0x49, 0x49, 0x49, 0x3E}},
+    {':', {0x00, 0x36, 0x36, 0x00, 0x00}},
     {'A', {0x7E, 0x11, 0x11, 0x11, 0x7E}}, {'B', {0x7F, 0x49, 0x49, 0x49, 0x36}},
     {'C', {0x3E, 0x41, 0x41, 0x41, 0x22}}, {'D', {0x7F, 0x41, 0x41, 0x22, 0x1C}},
     {'E', {0x7F, 0x49, 0x49, 0x49, 0x41}}, {'F', {0x7F, 0x09, 0x09, 0x09, 0x01}},
@@ -289,6 +291,14 @@ static const glyph_t FONT5X7[] = {
 };
 
 #define BOOT_MAX_W 1024u
+#define BOOT_TEXT_LINES 3u   /* domain, OD id, firmware version */
+/* "FW:N 3.0.0": the version line of the 3.0 boot screens. The letter names the firmware family
+ * the way BG22 shows "FW:S"; N is this nRF5 SDK build. */
+#define BOOT_FW_STR_(x) #x
+#define BOOT_FW_STR(x) BOOT_FW_STR_(x)
+#define BOOT_FW_LINE                                                                              \
+    "FW:N " BOOT_FW_STR(OD_NRF_FW_MAJOR) "." BOOT_FW_STR(OD_NRF_FW_MINOR) "."                    \
+        BOOT_FW_STR(OD_NRF_FW_PATCH)
 static uint8_t s_row[BOOT_MAX_W / 8u];
 
 static const uint8_t *glyph(char c)
@@ -454,6 +464,7 @@ bool od_boot_screen_render(const struct od_config *cfg, const struct SecurityCon
     const uint8_t scale = (w >= 400u && h >= 300u) ? 2u : 1u;
     const uint16_t pad = (uint16_t)(scale * 6u);
     const uint16_t modules = (uint16_t)(qr.size + 8u);
+    const uint16_t text_h = (uint16_t)(BOOT_TEXT_LINES * 10u * scale);
     uint16_t mpx = (uint16_t)(((h > w ? w : h) - 2u * pad) / modules);
     if (mpx < 1u) {
         mpx = 1u;
@@ -461,13 +472,17 @@ bool od_boot_screen_render(const struct od_config *cfg, const struct SecurityCon
     if (mpx > 6u) {
         mpx = 6u;
     }
+    const bool right = w >= (uint16_t)(mpx * modules + 160u);
+    /* Text above the QR: shrink the QR rather than draw the lines into it. */
+    while (!right && mpx > 1u && (uint32_t)mpx * modules + text_h + 3u * pad > h) {
+        mpx--;
+    }
     const uint16_t qpx = (uint16_t)(mpx * modules);
-    const bool right = w >= (uint16_t)(qpx + 160u);
     const uint16_t qx = right ? (uint16_t)(w - pad - qpx) : (uint16_t)((w - qpx) / 2u);
     const uint16_t qy = right ? pad : (uint16_t)(h > pad + qpx ? h - pad - qpx : 0u);
     const uint16_t avail = right ? qx : w;
     const char *const domain = "OPENDISPLAY.ORG";
-    const uint16_t ty = right ? (uint16_t)(qy + (qpx > 4u * 10u * scale ? (qpx - 4u * 10u * scale) / 2u : 0u))
+    const uint16_t ty = right ? (uint16_t)(qy + (qpx > text_h ? (qpx - text_h) / 2u : 0u))
                               : pad;
     const uint8_t bpp = g.bits_per_pixel ? g.bits_per_pixel : 1u;
 
@@ -479,10 +494,13 @@ bool od_boot_screen_render(const struct od_config *cfg, const struct SecurityCon
             memset(s_row, 0xFF, sizeof s_row);
             if (!blank) {
                 const uint16_t dw = text_w(domain, scale), nw = text_w(name, scale);
+                const uint16_t fw = text_w(BOOT_FW_LINE, scale);
                 text_row((uint16_t)y, dw < avail ? (uint16_t)((avail - dw) / 2u) : pad, ty, domain,
                          scale, w);
                 text_row((uint16_t)y, nw < avail ? (uint16_t)((avail - nw) / 2u) : pad,
                          (uint16_t)(ty + scale * 10u), name, scale, w);
+                text_row((uint16_t)y, fw < avail ? (uint16_t)((avail - fw) / 2u) : pad,
+                         (uint16_t)(ty + scale * 20u), BOOT_FW_LINE, scale, w);
                 if (y >= qy && y < (uint32_t)(qy + qpx)) {
                     const int16_t my = (int16_t)((y - qy) / mpx) - 4;
                     for (uint16_t mx = 0; mx < modules; mx++) {

@@ -46,7 +46,7 @@ build() { # cc extra-flags exe
 }
 
 build gcc "" "$OUT/test_service"
-BUS_LOG=$OUT/bus.log "$OUT/test_service"
+BUS_LOG=$OUT/bus.log BOOT_LOG=$OUT/boot.log "$OUT/test_service"
 if command -v clang >/dev/null 2>&1; then
   build clang "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" \
         "$OUT/test_service_asan"

@@ -25,36 +25,6 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 #define APP_VERSION 0x19
 #endif
 
-#ifndef BUILD_VERSION
-#ifdef BUILD_VERSION_MAJOR
-#ifdef BUILD_VERSION_MINOR
-#define BUILD_VERSION_STR_HELPER(x) #x
-#define BUILD_VERSION_STR(x) BUILD_VERSION_STR_HELPER(x)
-#define BUILD_VERSION BUILD_VERSION_STR(BUILD_VERSION_MAJOR) "." BUILD_VERSION_STR(BUILD_VERSION_MINOR)
-#else
-#define BUILD_VERSION "1.0"
-#endif
-#else
-#define BUILD_VERSION "1.0"
-#endif
-#endif
-
-#ifndef SHA_STRING
-#ifdef SHA_VALUE
-#define SHA_STRING SHA_VALUE
-#else
-#ifndef SHA
-#define SHA "1234567890abcdef1234567890abcdef12345678"
-#endif
-
-#ifndef STRINGIFY
-#define STRINGIFY(x) #x
-#endif
-#define XSTRINGIFY(x) STRINGIFY(x)
-#define SHA_STRING XSTRINGIFY(SHA)
-#endif
-#endif
-
 #define BLE_UUID_EPD_SVC_BASE \
     {{0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x46, 0x24, 0x00, 0x00}}
 #define BLE_UUID_EPD_SVC 0x2446
