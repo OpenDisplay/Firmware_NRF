@@ -18,8 +18,8 @@
 4. A few presets deliberately leave their source: DEVIATIONS below. Such a preset is "corrected":
    its packets replay token-identical to the corrected steps, the change is listed under
    "deviations", and the uncorrected packets stay under "alternatives" with their own
-   equivalence result. Nothing here is forced to match the 2.x driver. A corrected preset
-   that was checked on a real panel (GLASS) is "glass".
+   equivalence result. Nothing here is forced to match the 2.x driver. A preset whose packets
+   were checked on a real panel (GLASS) is "glass".
 
 --extra takes models described as op lists (cmd / delay_ms / wait_busy / reset / pixel_data /
 data). Those were not compiled from source, so they are marked "extracted, not cross-checked":
@@ -291,9 +291,14 @@ DEVIATIONS[0xE011] += [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("000
 DEVIATIONS[0xE101] = [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("00002701"), _SSD_YFLIP),
                       (0x4F, 0, bytes.fromhex("0000"), _SSD_YFLIP)]
 
-# Corrected presets checked on glass with the wire test image (upright, not mirrored, colours
-# right): key -> where. Their status is "glass".
+# Presets checked on glass with the wire test image (upright, not mirrored, colours right):
+# key -> where. Their status is "glass".
 GLASS: dict[int, str] = {
+    0xE002: "glass 2026-11-13: two 4.2in SSD BWR tags",
+    0xE013: "glass 2026-11-13: 1.6in SSD BWR tag",
+    0xE01D: "glass 2026-11-13: 1.3in SSD BWR tag",
+    0xE01F: "glass 2026-11-13: 2.2in Lite SSD BWR tag",
+    0xE020: "glass 2026-11-13: 4.2in SSD BWY tag",
     0xE011: "glass 2026-11-13: two 2.9in SSD BWR tags (2.x 1016 and a 1001-provisioned one)",
     0xE101: "glass 2026-11-13: 2.2in EL022H3WRA 160x296 tag (provisioned as 2.x 1020)",
 }
@@ -329,8 +334,12 @@ def build_entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
                 mode_steps: list[tuple], sleep_steps: list[tuple], notes: list[str],
                 blocked: list[str], legacy: dict, source: str, verified: str) -> dict:
     if key not in DEVIATIONS or blocked:
-        return _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, notes, blocked,
-                      legacy, source, verified)
+        e = _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, notes, blocked,
+                   legacy, source, verified)
+        if key in GLASS and e["status"] in ("equivalent", "extracted"):
+            e["status"] = "glass"
+            e["verified"] = GLASS[key]
+        return e
     alt = _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, list(notes),
                  list(blocked), legacy, source, verified)
     steps, done = deviate(key, mode_steps)
@@ -625,7 +634,7 @@ def main() -> int:
             "extracted": "replays token-identical to an op list that was not compiled",
             "corrected": "replays token-identical to its source with the listed deviations; "
                          "the uncorrected packets are under alternatives",
-            "glass": "corrected, and the corrected packets were checked on a real panel "
+            "glass": "equivalent or corrected, and these packets were checked on a real panel "
                      "(see verified)",
             "blocked": "cannot be expressed on this target",
         },

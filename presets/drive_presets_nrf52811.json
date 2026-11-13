@@ -31,7 +31,7 @@
   "equivalent": "replays token-identical to the 2.x driver after the transforms",
   "extracted": "replays token-identical to an op list that was not compiled",
   "corrected": "replays token-identical to its source with the listed deviations; the uncorrected packets are under alternatives",
-  "glass": "corrected, and the corrected packets were checked on a real panel (see verified)",
+  "glass": "equivalent or corrected, and these packets were checked on a real panel (see verified)",
   "blocked": "cannot be expressed on this target"
  },
  "names": {
@@ -167,7 +167,7 @@
    "name": "SSD1619_420_BWR",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 400,
@@ -180,8 +180,8 @@
     "model_id": 2
    },
    "color_scheme": 1,
-   "status": "corrected",
-   "verified": "untested",
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 4.2in SSD BWR tags",
    "blocked_on": [],
    "modes": [
     {
@@ -1669,7 +1669,7 @@
    "name": "SSD1619_016_BWR",
    "aliases": [],
    "notes": [
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 200,
@@ -1682,8 +1682,8 @@
     "model_id": 19
    },
    "color_scheme": 1,
-   "status": "corrected",
-   "verified": "untested",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 1.6in SSD BWR tag",
    "blocked_on": [],
    "modes": [
     {
@@ -2575,8 +2575,8 @@
     "model_id": 29
    },
    "color_scheme": 1,
-   "status": "equivalent",
-   "verified": "equivalent",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 1.3in SSD BWR tag",
    "blocked_on": [],
    "modes": [
     {
@@ -2711,8 +2711,8 @@
     "model_id": 31
    },
    "color_scheme": 1,
-   "status": "equivalent",
-   "verified": "equivalent",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 2.2in Lite SSD BWR tag",
    "blocked_on": [],
    "modes": [
     {
@@ -2767,7 +2767,7 @@
    "aliases": [],
    "notes": [
     "same drive as 0xE002 (SSD1619_420_BWR) with colour scheme 2; the same 2.x panel_ic_type 1001: pick by the panel's colour",
-    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 400,
@@ -2778,8 +2778,8 @@
     "pixel_height": 300
    },
    "color_scheme": 2,
-   "status": "corrected",
-   "verified": "untested",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 4.2in SSD BWY tag",
    "blocked_on": [],
    "modes": [
     {
