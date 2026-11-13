@@ -297,6 +297,16 @@ DEVIATIONS[0xE011] += [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("000
 DEVIATIONS[0xE101] = [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("00002701"), _SSD_YFLIP),
                       (0x4F, 0, bytes.fromhex("0000"), _SSD_YFLIP)]
 
+# key -> [(before cmd, cmd, data, reason)]: a command the source never sends, inserted before the
+# first step of `before cmd`.
+INSERTS: dict[int, list[tuple[int, int, bytes, str]]] = {}
+# The 4.3in UCVAR43 never sets PSR, so the gate scan is the chip default, which draws the wire
+# image mirrored and rotated 180 degrees. PSR 0F (UD and SHL set, KW/R mode, LUT from OTP) is
+# upright on glass; 07 (UD cleared) changes nothing, so the default already has UD cleared.
+_VAR43_ROT = ("UCVAR43 scan direction: PSR 0F inserted (the source sends no PSR); the chip default "
+              "drew the image mirrored and rotated 180 degrees, a vertical flip")
+INSERTS[0xE01B] = [(0x61, 0x00, b"\x0f", _VAR43_ROT)]
+
 # Presets checked on glass with the wire test image (upright, not mirrored, colours right):
 # key -> where. Their status is "glass".
 GLASS: dict[int, str] = {
@@ -309,6 +319,8 @@ GLASS: dict[int, str] = {
     0xE020: "glass 2026-11-13: 4.2in SSD BWY tag",
     0xE011: "glass 2026-11-13: two 2.9in SSD BWR tags (2.x 1016 and a 1001-provisioned one)",
     0xE101: "glass 2026-11-13: 2.2in EL022H3WRA 160x296 tag (provisioned as 2.x 1020)",
+    0xE01B: "glass 2026-11-13: 4.3in UCVAR43 BWR tag (orientation; the red greys a little after "
+            "the refresh, with and without the PSR)",
 }
 
 
@@ -331,7 +343,13 @@ def deviate(key: int, steps: list[tuple]) -> tuple[list[tuple], list[dict]]:
                 done.append({"cmd": f"0x{cmd:02X}", "from": c[2].hex(" "), "to": new.hex(" "),
                              "reason": why})
             out[i] = ("cmd", c[1], new)
-    if DEVIATIONS.get(key) and not done:
+    for before, cmd, data, why in INSERTS.get(key, []):
+        at = next((i for i, s in enumerate(out) if s[0] == "cmd" and s[1] == before), None)
+        if at is None:
+            raise SystemExit(f"0x{key:04X}: insert before cmd 0x{before:02X} matches no step")
+        out.insert(at, ("cmd", cmd, data))
+        done.append({"cmd": f"0x{cmd:02X}", "from": "(none)", "to": data.hex(" "), "reason": why})
+    if (DEVIATIONS.get(key) or INSERTS.get(key)) and not done:
         raise SystemExit(f"0x{key:04X}: deviation changes nothing (already applied at source?)")
     return out, done
 
@@ -341,7 +359,7 @@ def deviate(key: int, steps: list[tuple]) -> tuple[list[tuple], list[dict]]:
 def build_entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
                 mode_steps: list[tuple], sleep_steps: list[tuple], notes: list[str],
                 blocked: list[str], legacy: dict, source: str, verified: str) -> dict:
-    if key not in DEVIATIONS or blocked:
+    if (key not in DEVIATIONS and key not in INSERTS) or blocked:
         e = _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, notes, blocked,
                    legacy, source, verified)
         if key in GLASS and e["status"] in ("equivalent", "extracted"):

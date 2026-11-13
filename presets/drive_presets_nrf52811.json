@@ -2470,7 +2470,8 @@
    "aliases": [],
    "notes": [
     "T1: plane 0 inversion moved into 0x50 CDI DDX[0] (XOR 0x10); datasheet-derived, needs a glass check",
-    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms",
+    "deliberately differs from its source: 0x00 (none) -> 0f (UCVAR43 scan direction: PSR 0F inserted (the source sends no PSR); the chip default drew the image mirrored and rotated 180 degrees, a vertical flip). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 152,
@@ -2483,8 +2484,8 @@
     "model_id": 27
    },
    "color_scheme": 1,
-   "status": "equivalent",
-   "verified": "equivalent",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 4.3in UCVAR43 BWR tag (orientation; the red greys a little after the refresh, with and without the PSR)",
    "blocked_on": [],
    "modes": [
     {
@@ -2495,8 +2496,8 @@
      "color_scheme": 1,
      "planes": 2,
      "window": false,
-     "seq_bytes": 75,
-     "steps": 23,
+     "seq_bytes": 78,
+     "steps": 24,
      "fits": {
       "nrf52811": true
      }
@@ -2513,11 +2514,11 @@
     {
      "id": 174,
      "number": 0,
-     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004b0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83005610098020a040657633a03509700011000030113000301040001011200056400000100010000"
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004e0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83002000f05610098020a040657633a03509700011000030113000301040001011200056400000100010000"
     }
    ],
-   "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae7000000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004b0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83005610098020a040657633a03509700011000030113000301040001011200056400000100010000",
-   "drive_bytes": 150,
+   "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae7300000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004e0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83002000f05610098020a040657633a03509700011000030113000301040001011200056400000100010000",
+   "drive_bytes": 153,
    "equivalence": {
     "0": {
      "rc": 0,
@@ -2531,7 +2532,51 @@
    },
    "fits_target": {
     "nrf52811": true
-   }
+   },
+   "deviations": [
+    {
+     "cmd": "0x00",
+     "from": "(none)",
+     "to": "0f",
+     "reason": "UCVAR43 scan direction: PSR 0F inserted (the source sends no PSR); the chip default drew the image mirrored and rotated 180 degrees, a vertical flip"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "T1: plane 0 inversion moved into 0x50 CDI DDX[0] (XOR 0x10); datasheet-derived, needs a glass check",
+      "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000101ffff000000010203011101020001000564000207a50005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004b0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83005610098020a040657633a03509700011000030113000301040001011200056400000100010000"
+      }
+     ],
+     "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae7000000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004b0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83005610098020a040657633a03509700011000030113000301040001011200056400000100010000",
+     "drive_bytes": 150,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
   },
   "0xE01C": {
    "panel_ic_type": 57372,
