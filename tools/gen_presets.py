@@ -15,6 +15,11 @@
    with this target's -DOD_EPD_WITH_WINDOW=0), and the replayed bus stream is compared with the
    2.x stream after the documented transforms. "equivalent" means token-identical after them.
 
+4. A few presets deliberately leave their source: DEVIATIONS below. Such a preset is "corrected":
+   its packets replay token-identical to the corrected steps, the change is listed under
+   "deviations", and the uncorrected packets stay under "alternatives" with their own
+   equivalence result. Nothing here is forced to match the 2.x driver.
+
 --extra takes models described as op lists (cmd / delay_ms / wait_busy / reset / pixel_data /
 data). Those were not compiled from source, so they are marked "extracted, not cross-checked":
 the replay proves the packets encode the op list, not that the op list is right.
@@ -200,8 +205,14 @@ def invert_plane(steps: list[tuple], family: str, plane: int, notes: list[str]) 
         if not hits or any(nib(steps[i][2][0]) not in (0x0, 0x8) for i in hits):
             return "PLANE_INVERT"   # no 0x21, or the nibble is 'bypass', not normal/inverse
         what = "0x21 BW RAM option" if plane == 0 else "0x21 RED RAM option"
-    elif family in ("UC8176", "UCVAR43"):
-        reg, mask = 0x50, (0x10 if plane == 0 else 0x20)
+    elif family in ("UC8176", "UCVAR43", "UC8179"):
+        # CDI byte 1: UC8176 VBD[7:6] DDX[5:4] CDI[3:0]; UC8179 BDZ BDV[5:4] N2OCP DDX[1:0]
+        # (on UC8179 bits 5:4 are the border, not data polarity)
+        reg = 0x50
+        if family == "UC8179":
+            mask = 0x01 if plane == 0 else 0x02
+        else:
+            mask = 0x10 if plane == 0 else 0x20
         hits = [i for i, s in enumerate(steps) if s[0] == "cmd" and s[1] == reg and s[2]]
         if not hits:
             return "PLANE_INVERT"
@@ -245,12 +256,83 @@ def check(packets: bytes, w: int, h: int, mode_steps, sleep_steps) -> dict:
     res["all_equal"] = all(v["equal"] for v in res.values())
     return res
 
+# ---------------------------------------------------------------------------- deviations
+
+# The wire convention (opendisplay_protocol.h, py-opendisplay bitplanes): plane 0 bit 1 = white,
+# colour plane bit 1 = colour. SSD16xx RAM takes exactly that with the 0x21 RAM options at
+# "normal" (BW RAM 1 = white, RED RAM 1 = colour); 2.x left them at "inverse" (08 / 48, and 88
+# after T1), so its uploads came out inverted. 2.x's own boot screen, and the two SSD models it
+# tuned by hand (013, 022_LITE: net 0x21 = 00), already follow the rule.
+_SSD_POL = ("SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / "
+            "1 = colour planes; the source value inverted the image")
+_UC8179_POL = ("UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the wire's "
+               "convention; the source value inverted the BW plane")
+_UC8151_SHL = ("UC8151 scan direction: PSR SHL cleared (03 instead of 07), the orientation of "
+               "0xE019, which is correct on glass; the source value mirrors left-right")
+
+# key -> [(cmd, byte index, new value, reason)]; every occurrence of cmd is changed.
+DEVIATIONS: dict[int, list[tuple[int, int, int, str]]] = {
+    **{k: [(0x21, 0, 0x00, _SSD_POL)]
+       for k in (0xE002, 0xE00B, 0xE011, 0xE013, 0xE015, 0xE017)},
+    **{k: [(0x21, 0, 0x40, _SSD_POL)]
+       for k in (0xE004, 0xE00A, 0xE010, 0xE012, 0xE014, 0xE016)},
+    **{k: [(0x00, 0, 0x03, _UC8151_SHL)] for k in (0xE10F, 0xE110, 0xE111)},
+}
+# E007: CDI 30 07 -> 31 07 (data byte 0 is BDZ/BDV/N2OCP/DDX).
+DEVIATIONS[0xE007] = [(0x50, 0, 0x31, _UC8179_POL)]
+
+
+def deviate(key: int, steps: list[tuple]) -> tuple[list[tuple], list[dict]]:
+    """Apply DEVIATIONS[key] to a step list -> (new steps, what changed)."""
+    out = list(steps)
+    done: list[dict] = []
+    for cmd, idx, val, why in DEVIATIONS.get(key, []):
+        hits = [i for i, s in enumerate(out) if s[0] == "cmd" and s[1] == cmd and len(s[2]) > idx]
+        if not hits:
+            raise SystemExit(f"0x{key:04X}: deviation on cmd 0x{cmd:02X} matches no step")
+        for i in hits:
+            c = out[i]
+            new = bytes(c[2][:idx]) + bytes([val]) + bytes(c[2][idx + 1:])
+            if new != c[2]:
+                done.append({"cmd": f"0x{cmd:02X}", "from": c[2].hex(" "), "to": new.hex(" "),
+                             "reason": why})
+            out[i] = ("cmd", c[1], new)
+    if DEVIATIONS.get(key) and not done:
+        raise SystemExit(f"0x{key:04X}: deviation changes nothing (already applied at source?)")
+    return out, done
+
 # ---------------------------------------------------------------------------- entries
 
 
 def build_entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
                 mode_steps: list[tuple], sleep_steps: list[tuple], notes: list[str],
                 blocked: list[str], legacy: dict, source: str, verified: str) -> dict:
+    if key not in DEVIATIONS or blocked:
+        return _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, notes, blocked,
+                      legacy, source, verified)
+    alt = _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, list(notes),
+                 list(blocked), legacy, source, verified)
+    steps, done = deviate(key, mode_steps)
+    e = _entry(key, name, w, h, scheme, idle, steps, sleep_steps, list(notes), list(blocked),
+               legacy, source, verified)
+    if e["status"] != "blocked":
+        # The packets replay to the corrected steps (equivalence); they do not reproduce the
+        # source, on purpose: that is what "corrected" says.
+        e["status"] = "corrected" if e["status"] in ("equivalent", "extracted") else e["status"]
+        e["verified"] = "untested"
+    e["deviations"] = done
+    e["notes"] = e["notes"] + [f"deliberately differs from its source: {d['cmd']} "
+                               f"{d['from']} -> {d['to']} ({d['reason']}). Needs a glass check"
+                               for d in done]
+    e["alternatives"] = [{k: alt[k] for k in ("status", "verified", "notes", "packets",
+                                              "framed_hex", "drive_bytes", "equivalence")}
+                         | {"name": "as the source (" + source + ")"}]
+    return e
+
+
+def _entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
+           mode_steps: list[tuple], sleep_steps: list[tuple], notes: list[str],
+           blocked: list[str], legacy: dict, source: str, verified: str) -> dict:
     seq = encode_steps(mode_steps)
     sleep = encode_steps(sleep_steps)
     if len(sleep) > SLEEP_MAX:
@@ -384,8 +466,8 @@ def from_oplist(k: int, m: dict) -> dict:
     w, h = m.get("width"), m.get("height")
     scheme = SCHEME_BY_NAME.get(m.get("color"), None)
     ctrl = m.get("controller", "")
-    fam = ("SSD" if "SSD" in ctrl else "UC8176" if "UC8151" in ctrl or "UC8179" in ctrl
-           else "UCVAR43" if "var43" in ctrl else "UC")
+    fam = ("SSD" if "SSD" in ctrl else "UC8179" if "UC8179" in ctrl
+           else "UC8176" if "UC8151" in ctrl else "UCVAR43" if "var43" in ctrl else "UC")
     if not w or not h or scheme is None:
         blocked.append("GEOMETRY")
         w, h, scheme = w or 0, h or 0, 0 if scheme is None else scheme
@@ -494,6 +576,13 @@ def main() -> int:
             "T5": "reset before sleep left out",
             "T6": "sleep delay dropped to fit 20 B",
         },
+        "statuses": {
+            "equivalent": "replays token-identical to the 2.x driver after the transforms",
+            "extracted": "replays token-identical to an op list that was not compiled",
+            "corrected": "replays token-identical to its source with the listed deviations; "
+                         "the uncorrected packets are under alternatives",
+            "blocked": "cannot be expressed on this target",
+        },
         "names": {e["name"]: k for k, e in panels.items()},
         "panels": panels,
         "native_controllers": {},
@@ -502,9 +591,15 @@ def main() -> int:
     a.out.write_text(json.dumps(out, indent=1) + "\n")
     for k, e in panels.items():
         eq = e["equivalence"] or {}
+        alt = ""
+        if e.get("alternatives"):
+            a0 = e["alternatives"][0]
+            alt = f" alt={a0['status']}" + ("" if (a0["equivalence"] or {}).get("all_equal")
+                                            else "(DIFF)")
         print(f"{k} {e['name'][:34]:34} {e['width']}x{e['height']} s{e['color_scheme']} "
               f"{e['status']:10} bytes={e['drive_bytes']:4} {','.join(e['blocked_on'])} "
-              f"{'' if not eq else ('eq' if eq['all_equal'] else 'DIFF ' + json.dumps(eq))}")
+              f"{'' if not eq else ('eq' if eq['all_equal'] else 'DIFF ' + json.dumps(eq))}"
+              f"{alt}")
     return 0
 
 
