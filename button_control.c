@@ -54,11 +54,12 @@ void button_init(void) {
     if (!nrf_drv_gpiote_is_init()) {
         ret_code_t err_code = nrf_drv_gpiote_init();
         if (err_code != NRF_SUCCESS) {
-            NRF_LOG_ERROR("Failed to initialize GPIOTE: %d", err_code);
             return;
         }
     }
     
+    const uint32_t woke = NRF_P0->LATCH;   /* pins whose SENSE hit, e.g. the System OFF wake */
+    NRF_P0->LATCH = woke;                   /* write 1 to clear */
     buttonStateCount = 0;
     
     for (uint8_t i = 0; i < MAX_BUTTONS; i++) {
@@ -84,20 +85,18 @@ void button_init(void) {
         }
         
         if (input->button_data_byte_index >= 11) {
-            NRF_LOG_WARNING("BinaryInputs instance %d has invalid byte_index (%d), skipping",
-                           instanceIdx, input->button_data_byte_index);
             continue;
         }
         
         uint8_t* instancePins[8] = {
-            &input->reserved_pin_1,
-            &input->reserved_pin_2,
-            &input->reserved_pin_3,
-            &input->reserved_pin_4,
-            &input->reserved_pin_5,
-            &input->reserved_pin_6,
-            &input->reserved_pin_7,
-            &input->reserved_pin_8
+            &input->input_pin_1,
+            &input->input_pin_2,
+            &input->input_pin_3,
+            &input->input_pin_4,
+            &input->input_pin_5,
+            &input->input_pin_6,
+            &input->input_pin_7,
+            &input->input_pin_8
         };
         
         for (uint8_t pinIdx = 0; pinIdx < 8; pinIdx++) {
@@ -108,7 +107,6 @@ void button_init(void) {
             }
             
             if (buttonStateCount >= MAX_BUTTONS) {
-                NRF_LOG_WARNING("Maximum button count (%d) reached, skipping remaining pins", MAX_BUTTONS);
                 break;
             }
             
@@ -152,14 +150,26 @@ void button_init(void) {
             
             ret_code_t err_code = nrf_drv_gpiote_in_init(pin, &in_config, gpiote_event_handler);
             if (err_code != NRF_SUCCESS) {
-                NRF_LOG_ERROR("Failed to initialize GPIOTE for pin %d: %d", pin, err_code);
                 continue;
             }
             
             nrf_drv_gpiote_in_event_enable(pin, true);
             
             btn->initialized = true;
+            btn->pull = hasPullup ? NRF_GPIO_PIN_PULLUP
+                      : hasPulldown ? NRF_GPIO_PIN_PULLDOWN : NRF_GPIO_PIN_NOPULL;
             buttonStateCount++;
+            /* Held at start-up, or latched as the pin that woke the tag from System OFF (LATCH
+             * keeps the SENSE hit through the wake): advertise it as the first press, so the
+             * host sees which button woke the tag. */
+            if (btn->current_state == 1u || (woke & (1uL << pin)) != 0u) {
+                btn->press_count = 1;
+                btn->last_press_time = timestamp();
+                dynamicreturndata[btn->byte_index] =
+                    (uint8_t)((btn->button_id & BUTTON_ID_MASK) |
+                              ((btn->press_count & PRESS_COUNT_MASK) << PRESS_COUNT_SHIFT) |
+                              ((btn->current_state & BUTTON_STATE_MASK) << BUTTON_STATE_SHIFT));
+            }
         }
     }
 }
@@ -229,5 +239,19 @@ void process_button_events(void) {
     
     if (!is_ble_active()) {
         advertising_restart_with_updated_msd();
+    }
+}
+
+void button_sleep_arm(void) {
+    for (uint8_t i = 0; i < buttonStateCount; i++) {
+        ButtonState* btn = &buttonStates[i];
+        if (!btn->initialized) {
+            continue;
+        }
+        /* The GPIOTE IN channel does not run in System OFF; the pin's SENSE does. */
+        nrf_drv_gpiote_in_uninit(btn->pin);
+        btn->initialized = false;
+        nrf_gpio_cfg_sense_input(btn->pin, (nrf_gpio_pin_pull_t)btn->pull,
+                                 btn->inverted ? NRF_GPIO_PIN_SENSE_LOW : NRF_GPIO_PIN_SENSE_HIGH);
     }
 }

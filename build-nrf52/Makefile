@@ -37,20 +37,33 @@ endif
 
 # Source files - Application
 SRC_FILES += $(PROJECT_ROOT)/main.c
-SRC_FILES += $(PROJECT_ROOT)/config_storage.c
-SRC_FILES += $(PROJECT_ROOT)/config_parser.c
-SRC_FILES += $(PROJECT_ROOT)/encryption.c
 SRC_FILES += $(PROJECT_ROOT)/led_control.c
 SRC_FILES += $(PROJECT_ROOT)/button_control.c
-SRC_FILES += $(PROJECT_ROOT)/boot_screen.c
 SRC_FILES += $(PROJECT_ROOT)/qr/qrcode.c
 
 # Source files - EPD
 # EPD_config.c removed - legacy config system replaced by config_storage.c
 SRC_FILES += $(PROJECT_ROOT)/EPD/EPD_driver.c
 SRC_FILES += $(PROJECT_ROOT)/EPD/EPD_service.c
-SRC_FILES += $(PROJECT_ROOT)/EPD/UC81xx.c
-SRC_FILES += $(PROJECT_ROOT)/EPD/SSD16xx.c
+
+# Shared OpenDisplay 3.0 chain, vendored unmodified under od/ (tools/sync_od.sh, od/SOURCE)
+OD_CORE = od_epd od_epd_cfg od_cfg_index od_display od_color od_config_store od_config_tlv \
+          od_config_asm od_advert od_cmd_spi_raw
+SRC_FILES += $(foreach f,$(OD_CORE),$(PROJECT_ROOT)/od/core/$(f).c)
+
+# This firmware's glue onto the shared chain
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_nvs.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_display.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_config.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_bootguard.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_flash.c
+# NFC (0x2A config, 0x0083): an I2C tag chip, glue/od_nrf_nfc.c. OD_CAP_NFC=0 leaves it out.
+# Defined here, before the ifeq reads it.
+OD_CAP_NFC ?= 1
+ifeq ($(OD_CAP_NFC),1)
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_nfc.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_i2c.c
+endif
 
 # Source files - GUI
 # GUI files removed - not used in current implementation (only MODE_PICTURE supported)
@@ -140,6 +153,11 @@ ASM_FILES += $(SDK_ROOT)/modules/nrfx/mdk/gcc_startup_nrf52811.S
 INC_FOLDERS += $(PROJECT_ROOT)
 INC_FOLDERS += $(PROJECT_ROOT)/EPD
 INC_FOLDERS += $(PROJECT_ROOT)/qr
+INC_FOLDERS += $(PROJECT_ROOT)/glue
+INC_FOLDERS += $(PROJECT_ROOT)/build-nrf52/$(OUTPUT_DIRECTORY)
+INC_FOLDERS += $(PROJECT_ROOT)/od/core
+INC_FOLDERS += $(PROJECT_ROOT)/od/hal
+INC_FOLDERS += $(PROJECT_ROOT)/od/protocol
 # GUI include folder removed - GUI files not used in current implementation
 # INC_FOLDERS += $(PROJECT_ROOT)/GUI
 INC_FOLDERS += $(SDK_ROOT)
@@ -186,7 +204,6 @@ INC_FOLDERS += $(SDK_ROOT)/modules/nrfx
 INC_FOLDERS += $(SDK_ROOT)/modules/nrfx/mdk
 INC_FOLDERS += $(SDK_ROOT)/modules/nrfx/drivers/include
 INC_FOLDERS += $(SDK_ROOT)/modules/nrfx/hal
-INC_FOLDERS += $(SDK_ROOT)/external/nrf_oberon/include
 
 # Compiler defines
 CFLAGS += -DAPP_TIMER_V2
@@ -199,15 +216,19 @@ CFLAGS += -DNRFX_COREDEP_DELAY_US_LOOP_CYCLES=3
 CFLAGS += -DNRF_DFU_SVCI_ENABLED
 CFLAGS += -DNRF_DFU_TRANSPORT_BLE=1
 CFLAGS += -DNRF_SD_BLE_API_VERSION=7
-# Define version strings - use separate defines for major/minor to avoid quote issues
-CFLAGS += -DBUILD_VERSION_MAJOR=$(MAJOR_VERSION)
-CFLAGS += -DBUILD_VERSION_MINOR=$(MINOR_VERSION)
-# Pass SHA value (if provided) - header will construct SHA_STRING from it
-ifneq ($(SHA_VALUE),)
-CFLAGS += -DSHA_VALUE=$(shell echo '"$(SHA_VALUE)"')
-endif
+# The firmware version and git SHA reach the code through $(BUILD_ID_H), generated below.
 CFLAGS += -DAPP_VERSION=$(APP_VERSION)
 CFLAGS += -DS112
+# Shared-chain profile for this target (see the report for the reasoning behind each value)
+# 2000 B: one 4 KB FDS data page must hold the old and the new record during an update.
+CFLAGS += -DOD_CONFIG_MAX_SIZE=2000u
+CFLAGS += -DOD_CAP_LOG=0
+CFLAGS += -DOD_EPD_WITH_WINDOW=0
+CFLAGS += -DOD_CAP_PIPE=0 -DOD_CAP_PARTIAL=0 -DOD_CAP_DUAL_CS=0 -DOD_CAP_RXQ=0
+CFLAGS += -DOD_CAP_READ_IDENT=1
+OD_CAP_SPI_RAW ?= 1
+CFLAGS += -DOD_CAP_SPI_RAW=$(OD_CAP_SPI_RAW)
+CFLAGS += -DOD_CAP_NFC=$(OD_CAP_NFC)
 CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -D__HEAP_SIZE=8192
 CFLAGS += -D__STACK_SIZE=2048
@@ -262,9 +283,6 @@ LDFLAGS += -Wl,--undefined=main
 LDFLAGS += -Wl,--undefined=SystemInit
 # Disable -flto as it can cause issues with startup/initialization
 # LDFLAGS += -flto
-# Oberon crypto library (soft-float, Cortex-M4 for nRF52811)
-OBERON_LIB_DIR = $(SDK_ROOT)/external/nrf_oberon/lib/cortex-m4/soft-float
-LDFLAGS += -L$(OBERON_LIB_DIR)
 LDFLAGS += -Wl,--start-group -lc -lnosys -lm -Wl,--end-group
 
 # Object files - convert source paths to object paths
@@ -292,17 +310,21 @@ $(OUTPUT_DIRECTORY):
 	@mkdir -p $(OUTPUT_DIRECTORY)/GUI
 	@mkdir -p $(OUTPUT_DIRECTORY)/sdk
 
-# Compile project C files
+# Compile project C files. -MMD -MP writes a .d file next to each object, so an object is rebuilt
+# when a header it includes changes (a struct layout change in structs.h otherwise leaves stale
+# objects that read the old field offsets).
 $(OUTPUT_DIRECTORY)/%.o: $(PROJECT_ROOT)/%.c | $(OUTPUT_DIRECTORY)
 	@echo "Compiling: $<"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Compile SDK C files
 $(OUTPUT_DIRECTORY)/sdk/%.o: $(SDK_ROOT)/%.c | $(OUTPUT_DIRECTORY)
 	@echo "Compiling: $<"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(OBJ_FILES:.o=.d)
 
 # Compile project assembly files
 $(OUTPUT_DIRECTORY)/%.o: $(PROJECT_ROOT)/%.s | $(OUTPUT_DIRECTORY)
@@ -322,10 +344,10 @@ $(OUTPUT_DIRECTORY)/sdk/%.o: $(SDK_ROOT)/%.S | $(OUTPUT_DIRECTORY)
 	@mkdir -p $(dir $@)
 	@$(CC) $(ASMFLAGS) -c $< -o $@
 
-# Link (Oberon library must come after OBJ_FILES so linker resolves symbols)
-$(OUTPUT_DIRECTORY)/$(TARGET).out: $(OBJ_FILES) | $(OUTPUT_DIRECTORY)
+# Link
+$(OUTPUT_DIRECTORY)/$(TARGET).out: $(OBJ_FILES) $(CURDIR)/nrf52811_xxaa_s112.ld | $(OUTPUT_DIRECTORY)
 	@echo "Linking: $@"
-	@$(CC) $(LDFLAGS) -o $@ $(OBJ_FILES) -loberon_3.0.8
+	@$(CC) $(LDFLAGS) -o $@ $(OBJ_FILES)
 	@$(SIZE) $@
 
 # Create hex file
@@ -346,25 +368,46 @@ KEY_FILE ?= $(PROJECT_ROOT)/tools/priv.pem
 DFU_SETTINGS_HEX = $(OUTPUT_DIRECTORY)/$(TARGET)-settings.hex
 DFU_OTA_ZIP = $(OUTPUT_DIRECTORY)/$(TARGET)-ota.zip
 # Version configuration: can set MAJOR/MINOR or APP_VERSION directly
-MAJOR_VERSION ?= 1
+MAJOR_VERSION ?= 3
 MINOR_VERSION ?= 0
+PATCH_VERSION ?= 0
 # APP_VERSION: if not explicitly set, calculate from MAJOR.MINOR (as single incrementing number)
 # Format: major * 100 + minor (e.g., 1.0 = 100, 1.5 = 105, 2.0 = 200)
 # Or use hex format like 0x19 (25 decimal) for legacy compatibility
 # Note: nrfutil expects a decimal number, not hex
 APP_VERSION ?= $(shell echo $$(( $(MAJOR_VERSION) * 100 + $(MINOR_VERSION) )))
+# The version the bootloader compares (init packet fw_version, settings app_version). It stays
+# at the 2.x value: if the bootloader prevents downgrades, a unit whose settings say 300 would
+# refuse every 2.x package (222) afterwards, and the 3.x -> 2.x path would be gone. It is not
+# the version FIRMWARE_VERSION reports (MAJOR_VERSION.MINOR_VERSION).
+DFU_APP_VERSION ?= 222
 BOOTLOADER_VERSION ?= 1
 BL_SETTINGS_VERSION ?= 1
 DFU_HW_VERSION ?= 52
 
-# Build version string for firmware reporting (e.g., "1.0")
-# Allow manual override of SHA, otherwise auto-detect from git
-SHA ?= $(shell cd $(PROJECT_ROOT) && git rev-parse --short HEAD 2>/dev/null || echo "")
-# Use shell echo to properly escape quotes for compiler -D flag
-BUILD_VERSION_STR = $(shell echo '"$(MAJOR_VERSION).$(MINOR_VERSION)"')
-# For SHA_STRING: pass SHA value and let header construct the string
-# This avoids quote escaping issues with -D flags
-SHA_VALUE = $(if $(SHA),$(SHA),)
+# One source of truth for the version this firmware reports: MAJOR/MINOR/PATCH_VERSION above and
+# SHA, the git short SHA of the tree being built ("-dirty" when it has uncommitted changes; set
+# SHA=... to override). They are written to $(BUILD_ID_H), which FIRMWARE_VERSION (0x0043) and the
+# boot screen read. The file is rewritten only when its content changes, so a new commit rebuilds
+# exactly the two objects that include it.
+ifeq ($(origin SHA),undefined)
+SHA := $(shell cd $(PROJECT_ROOT) && git rev-parse --short=7 HEAD 2>/dev/null)
+ifneq ($(SHA),)
+SHA := $(SHA)$(shell cd $(PROJECT_ROOT) && git diff --quiet HEAD -- 2>/dev/null || echo -dirty)
+endif
+endif
+BUILD_ID_H := $(OUTPUT_DIRECTORY)/od_nrf_build_id.h
+BUILD_ID_HASH := \#
+BUILD_ID_LINES := '/* Generated by build-nrf52/Makefile. Do not edit. */' \
+	'$(BUILD_ID_HASH)define OD_NRF_FW_MAJOR $(MAJOR_VERSION)' \
+	'$(BUILD_ID_HASH)define OD_NRF_FW_MINOR $(MINOR_VERSION)' \
+	'$(BUILD_ID_HASH)define OD_NRF_FW_PATCH $(PATCH_VERSION)' \
+	'$(BUILD_ID_HASH)define OD_NRF_FW_SHA "$(if $(SHA),$(SHA),unknown)"'
+$(shell mkdir -p $(OUTPUT_DIRECTORY) && printf '%s\n' $(BUILD_ID_LINES) > $(BUILD_ID_H).tmp && \
+	{ cmp -s $(BUILD_ID_H).tmp $(BUILD_ID_H) || mv -f $(BUILD_ID_H).tmp $(BUILD_ID_H); }; \
+	rm -f $(BUILD_ID_H).tmp)
+$(BUILD_ID_H): ;
+$(OUTPUT_DIRECTORY)/EPD/EPD_service.o $(OUTPUT_DIRECTORY)/glue/od_nrf_display.o: $(BUILD_ID_H)
 DFU_FAMILY ?= NRF52810
 DFU_SD_ID ?= 0x126
 DFU_SD_REQ ?= 0x126
@@ -418,7 +461,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 				--key-file $(KEY_FILE) \
 				--hw-version $(DFU_HW_VERSION) \
 				--sd-req $(DFU_SD_REQ) \
-				--application-version 222 \
+				--application-version $(DFU_APP_VERSION) \
 				$(DFU_OTA_ZIP); \
 		else \
 			$(NRFUTIL) pkg generate \
@@ -426,7 +469,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 				--key-file $(KEY_FILE) \
 				--hw-version $(DFU_HW_VERSION) \
 				--sd-req $(DFU_SD_REQ) \
-				--application-version 222 \
+				--application-version $(DFU_APP_VERSION) \
 				$(DFU_OTA_ZIP); \
 		fi; \
 	else \
@@ -439,7 +482,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 			--family $(DFU_FAMILY) \
 			--application $(OUTPUT_DIRECTORY)/$(TARGET).hex \
 			--softdevice $(SOFTDEVICE_HEX) \
-			--application-version $(APP_VERSION) \
+			--application-version $(DFU_APP_VERSION) \
 			--bootloader-version $(BOOTLOADER_VERSION) \
 			--bl-settings-version $(BL_SETTINGS_VERSION) \
 			--key-file $(KEY_FILE) \
@@ -451,7 +494,7 @@ $(DFU_SETTINGS_HEX): $(OUTPUT_DIRECTORY)/$(TARGET).hex
 			--family $(DFU_FAMILY) \
 			--application $(OUTPUT_DIRECTORY)/$(TARGET).hex \
 			--softdevice $(SOFTDEVICE_HEX) \
-			--application-version $(APP_VERSION) \
+			--application-version $(DFU_APP_VERSION) \
 			--bootloader-version $(BOOTLOADER_VERSION) \
 			--bl-settings-version $(BL_SETTINGS_VERSION) \
 			--key-file $(KEY_FILE) \
@@ -588,8 +631,9 @@ help:
 	@echo "  make clean ENABLE_RTT=1  - Clean and build with RTT logging"
 	@echo "  make install ENABLE_RTT=1 RTT=1 - Build with RTT, flash and start monitoring"
 	@echo ""
-	@echo "Version configuration (default: MAJOR=1, MINOR=0, APP_VERSION=100):"
-	@echo "  make MAJOR_VERSION=2 MINOR_VERSION=5  - Set version to 2.5 (APP_VERSION=205)"
+	@echo "Version configuration (default: MAJOR=3, MINOR=0, PATCH=0, APP_VERSION=300):"
+	@echo "  make MAJOR_VERSION=3 MINOR_VERSION=1  - Set version to 3.1 (APP_VERSION=301)"
+	@echo "  make PATCH_VERSION=2                  - Patch number shown on the boot screen (3.0.2)"
 	@echo "  make APP_VERSION=123                  - Set APP_VERSION directly (overrides MAJOR/MINOR)"
 	@echo "  make SHA=abc123def                    - Override git SHA (default: auto-detect from git)"
 	@echo "  Version format: APP_VERSION = MAJOR * 100 + MINOR (e.g., 1.0 = 100, 2.5 = 205)"

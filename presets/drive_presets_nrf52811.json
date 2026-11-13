@@ -1,0 +1,1188 @@
+{
+ "schema": "opendisplay.drive_presets",
+ "schema_version": 1,
+ "schema_minor": 3,
+ "generator": "fw-nrf52811 tools/gen_presets.py",
+ "provisional_ids": true,
+ "caps": {
+  "nrf52811": 2000,
+  "max_steps": 128,
+  "sleep_max": 20
+ },
+ "target_classes": {
+  "nrf52811": {
+   "max_steps": 128,
+   "window": false,
+   "config": 2000,
+   "targets": [
+    "nrf52811"
+   ]
+  }
+ },
+ "transforms": {
+  "T1": "software plane inversion moved into the controller's polarity register",
+  "T2": "bare data byte joined to the preceding command",
+  "T3": "reset pulse 10 ms per phase instead of 50 ms",
+  "T4": "BWRY frame is the full 2 bpp frame",
+  "T5": "reset before sleep left out",
+  "T6": "sleep delay dropped to fit 20 B"
+ },
+ "statuses": {
+  "equivalent": "replays token-identical to the 2.x driver after the transforms",
+  "extracted": "replays token-identical to an op list that was not compiled",
+  "corrected": "replays token-identical to its source with the listed deviations; the uncorrected packets are under alternatives",
+  "glass": "equivalent or corrected, and these packets were checked on a real panel (see verified)",
+  "blocked": "cannot be expressed on this target"
+ },
+ "names": {
+  "SSD1619_420_BWR": "0xE002",
+  "UC8179_750_BWR": "0xE007",
+  "UC8151_029_BWR": "0xE00F",
+  "SSD1619_029_BWR": "0xE011",
+  "SSD1619_016_BWR": "0xE013",
+  "UC8151_027_BWR": "0xE019",
+  "UCVAR43_430_BWR": "0xE01B",
+  "SSD1619_013_BWR": "0xE01D",
+  "SSD1619_022_LITE_BWR": "0xE01F",
+  "SSD1619_420_BWY": "0xE020",
+  "M3_2.2in_BWR_160x296": "0xE101"
+ },
+ "panels": {
+  "0xE002": {
+   "panel_ic_type": 57346,
+   "name": "SSD1619_420_BWR",
+   "aliases": [],
+   "notes": [
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 400,
+   "height": 300,
+   "legacy": {
+    "panel_ic_type": 1001,
+    "color_scheme": 1,
+    "pixel_width": 400,
+    "pixel_height": 300,
+    "model_id": 2
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 4.2in SSD BWR tags",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032100000222f70120000102110303440031024e00054500002b01034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032100000222f70120000102110303440031024e00054500002b01034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x21",
+     "from": "08 00",
+     "to": "00 00",
+     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321080002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032108000222f70120000102110303440031024e00054500002b01034f000000010000"
+      }
+     ],
+     "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321080002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032108000222f70120000102110303440031024e00054500002b01034f000000010000",
+     "drive_bytes": 233,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE007": {
+   "panel_ic_type": 57351,
+   "name": "UC8179_750_BWR",
+   "aliases": [],
+   "notes": [
+    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms",
+    "deliberately differs from its source: 0x50 30 07 -> 31 07 (UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the wire's convention; the source value inverted the BW plane). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 800,
+   "height": 480,
+   "legacy": {
+    "panel_ic_type": 1006,
+    "color_scheme": 1,
+    "pixel_width": 800,
+    "pixel_height": 480,
+    "model_id": 7
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 7.4in UC8179 BWR 800x480 tag (CDI 0x31 polarity fix confirmed)",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 109,
+     "steps": 23,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000101ffff000000010203011101020001000564000207a50005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000006d0002000f035031070561032001e0010400010a900000031f000001df0001910a900000031f000001df00011000030a900000031f000001df000a900000031f000001df0001910a900000031f000001df000113000301920a900000031f000001df00011200056400000100010000"
+    }
+   ],
+   "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae9200000066756c6c00000000000000000101000000ffffffffffffffff00000000000000006d0002000f035031070561032001e0010400010a900000031f000001df0001910a900000031f000001df00011000030a900000031f000001df000a900000031f000001df0001910a900000031f000001df000113000301920a900000031f000001df00011200056400000100010000",
+   "drive_bytes": 184,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x50",
+     "from": "30 07",
+     "to": "31 07",
+     "reason": "UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the wire's convention; the source value inverted the BW plane"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000101ffff000000010203011101020001000564000207a50005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000006d0002000f035030070561032001e0010400010a900000031f000001df0001910a900000031f000001df00011000030a900000031f000001df000a900000031f000001df0001910a900000031f000001df000113000301920a900000031f000001df00011200056400000100010000"
+      }
+     ],
+     "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae9200000066756c6c00000000000000000101000000ffffffffffffffff00000000000000006d0002000f035030070561032001e0010400010a900000031f000001df0001910a900000031f000001df00011000030a900000031f000001df000a900000031f000001df0001910a900000031f000001df000113000301920a900000031f000001df00011200056400000100010000",
+     "drive_bytes": 184,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE00F": {
+   "panel_ic_type": 57359,
+   "name": "UC8151_029_BWR",
+   "aliases": [],
+   "notes": [
+    "T2: bare data 00 after a busy wait is sent with cmd 0x04, before that wait",
+    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 168,
+   "height": 384,
+   "legacy": {
+    "panel_ic_type": 1014,
+    "color_scheme": 1,
+    "pixel_width": 168,
+    "pixel_height": 384,
+    "model_id": 15
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 2.9in UC8151 BWR tags",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 55,
+     "steps": 20,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000101ffff0000000102030111010200010207a50005c8000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461a801800204000001011000030113000301040001011200056400000100010000"
+    }
+   ],
+   "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c8000005c800000000ae5c00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461a801800204000001011000030113000301040001011200056400000100010000",
+   "drive_bytes": 130,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   }
+  },
+  "0xE011": {
+   "panel_ic_type": 57361,
+   "name": "SSD1619_029_BWR",
+   "aliases": [],
+   "notes": [
+    "T1: plane 1 inversion moved into 0x21 RED RAM option (XOR 0x80); datasheet-derived, needs a glass check",
+    "deliberately differs from its source: 0x21 88 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass",
+    "deliberately differs from its source: 0x11 01 -> 03 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x45 80 01 00 00 -> 00 00 7f 01 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x4F 7f 01 -> 00 00 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 168,
+   "height": 384,
+   "legacy": {
+    "panel_ic_type": 1016,
+    "color_scheme": 1,
+    "pixel_width": 168,
+    "pixel_height": 384,
+    "model_id": 17
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 2.9in SSD BWR tags (2.x 1016 and a 1001-provisioned one)",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f00000124000302110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000001260003032100000222f70120000102110303440115024e01054500007f01034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f00000124000302110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000002110303440115024e01054500007f01034f000001260003032100000222f70120000102110303440115024e01054500007f01034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x21",
+     "from": "88 00",
+     "to": "00 00",
+     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+    },
+    {
+     "cmd": "0x11",
+     "from": "01",
+     "to": "03",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x45",
+     "from": "80 01 00 00",
+     "to": "00 00 7f 01",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x4F",
+     "from": "7f 01",
+     "to": "00 00",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "T1: plane 1 inversion moved into 0x21 RED RAM option (XOR 0x80); datasheet-derived, needs a glass check"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321880002110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f010124000302110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0101260003032188000222f70120000102110103440115024e01054580010000034f7f0100010000"
+      }
+     ],
+     "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401800100023c050218800321880002110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f010124000302110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0102110103440115024e01054580010000034f7f0101260003032188000222f70120000102110103440115024e01054580010000034f7f0100010000",
+     "drive_bytes": 233,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE013": {
+   "panel_ic_type": 57363,
+   "name": "SSD1619_016_BWR",
+   "aliases": [],
+   "notes": [
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 200,
+   "height": 200,
+   "legacy": {
+    "panel_ic_type": 1018,
+    "color_scheme": 1,
+    "pixel_width": 200,
+    "pixel_height": 200,
+    "model_id": 19
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 1.6in SSD BWR tag",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401c80000023c050218800321000002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f00000124000302110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000001260003032100000222f70120000102110303440018024e0005450000c700034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401c80000023c050218800321000002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f00000124000302110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000001260003032100000222f70120000102110303440018024e0005450000c700034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x21",
+     "from": "08 00",
+     "to": "00 00",
+     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401c80000023c050218800321080002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f00000124000302110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000001260003032108000222f70120000102110303440018024e0005450000c700034f000000010000"
+      }
+     ],
+     "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401c80000023c050218800321080002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f00000124000302110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000002110303440018024e0005450000c700034f000001260003032108000222f70120000102110303440018024e0005450000c700034f000000010000",
+     "drive_bytes": 233,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE019": {
+   "panel_ic_type": 57369,
+   "name": "UC8151_027_BWR",
+   "aliases": [],
+   "notes": [
+    "T2: bare data 00 after a busy wait is sent with cmd 0x04, before that wait",
+    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms",
+    "deliberately differs from its source: 0x00 03 09 -> 0f 09 (UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; the source value drew the image upside down). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 200,
+   "height": 300,
+   "legacy": {
+    "panel_ic_type": 1024,
+    "color_scheme": 1,
+    "pixel_width": 200,
+    "pixel_height": 300,
+    "model_id": 25
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 2.7in UC8151 BWR tag",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 55,
+     "steps": 20,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000101ffff0000000102030111010200010207a50005c8000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c02505703000f090461c8012c0204000001011000030113000301040001011200056400000100010000"
+    }
+   ],
+   "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c8000005c800000000ae5c00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c02505703000f090461c8012c0204000001011000030113000301040001011200056400000100010000",
+   "drive_bytes": 130,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x00",
+     "from": "03 09",
+     "to": "0f 09",
+     "reason": "UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; the source value drew the image upside down"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "T2: bare data 00 after a busy wait is sent with cmd 0x04, before that wait",
+      "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000101ffff0000000102030111010200010207a50005c8000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461c8012c0204000001011000030113000301040001011200056400000100010000"
+      }
+     ],
+     "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c8000005c800000000ae5c00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461c8012c0204000001011000030113000301040001011200056400000100010000",
+     "drive_bytes": 130,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE01B": {
+   "panel_ic_type": 57371,
+   "name": "UCVAR43_430_BWR",
+   "aliases": [],
+   "notes": [
+    "T1: plane 0 inversion moved into 0x50 CDI DDX[0] (XOR 0x10); datasheet-derived, needs a glass check",
+    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms",
+    "deliberately differs from its source: 0x00 (none) -> 0f (UCVAR43 scan direction: PSR 0F inserted (the source sends no PSR); the chip default drew the image mirrored and rotated 180 degrees, a vertical flip). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 152,
+   "height": 522,
+   "legacy": {
+    "panel_ic_type": 1026,
+    "color_scheme": 1,
+    "pixel_width": 152,
+    "pixel_height": 522,
+    "model_id": 27
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 4.3in UCVAR43 BWR tags (orientation; on one the red greys a little after the refresh, with and without the PSR)",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 78,
+     "steps": 24,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000101ffff000000010203011101020001000564000207a50005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004e0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83002000f05610098020a040657633a03509700011000030113000301040001011200056400000100010000"
+    }
+   ],
+   "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae7300000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004e0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83002000f05610098020a040657633a03509700011000030113000301040001011200056400000100010000",
+   "drive_bytes": 153,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x00",
+     "from": "(none)",
+     "to": "0f",
+     "reason": "UCVAR43 scan direction: PSR 0F inserted (the source sends no PSR); the chip default drew the image mirrored and rotated 180 degrees, a vertical flip"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "T1: plane 0 inversion moved into 0x50 CDI DDX[0] (XOR 0x10); datasheet-derived, needs a glass check",
+      "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000101ffff000000010203011101020001000564000207a50005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004b0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83005610098020a040657633a03509700011000030113000301040001011200056400000100010000"
+      }
+     ],
+     "framed_hex": "00b11e00000101ffff000000010203011101020001000564000207a50005c800000000ae7000000066756c6c00000000000000000101000000ffffffffffffffff00000000000000004b0003f8600503f8a10003f8730503f87e3103f8b88003f8920003f8871103f8880603f8a83005610098020a040657633a03509700011000030113000301040001011200056400000100010000",
+     "drive_bytes": 150,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE01D": {
+   "panel_ic_type": 57373,
+   "name": "SSD1619_013_BWR",
+   "aliases": [],
+   "notes": [
+    "T1: plane 0 inversion moved into 0x21 BW RAM option (XOR 0x08); datasheet-derived, needs a glass check",
+    "T1: plane 1 inversion moved into 0x21 RED RAM option (XOR 0x80); datasheet-derived, needs a glass check"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 144,
+   "height": 200,
+   "legacy": {
+    "panel_ic_type": 1028,
+    "color_scheme": 1,
+    "pixel_width": 144,
+    "pixel_height": 200,
+    "model_id": 29
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 1.3in SSD BWR tag",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401c80000023c050218800321000002110303440112024e0105450000c700034f000002110303440112024e0105450000c700034f00000124000302110303440112024e0105450000c700034f000002110303440112024e0105450000c700034f000002110303440112024e0105450000c700034f000001260003032100000222f70120000102110303440112024e0105450000c700034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401c80000023c050218800321000002110303440112024e0105450000c700034f000002110303440112024e0105450000c700034f00000124000302110303440112024e0105450000c700034f000002110303440112024e0105450000c700034f000002110303440112024e0105450000c700034f000001260003032100000222f70120000102110303440112024e0105450000c700034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   }
+  },
+  "0xE01F": {
+   "panel_ic_type": 57375,
+   "name": "SSD1619_022_LITE_BWR",
+   "aliases": [],
+   "notes": [
+    "T1: plane 0 inversion moved into 0x21 BW RAM option (XOR 0x08); datasheet-derived, needs a glass check"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 128,
+   "height": 250,
+   "legacy": {
+    "panel_ic_type": 1030,
+    "color_scheme": 1,
+    "pixel_width": 128,
+    "pixel_height": 250,
+    "model_id": 31
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 2.2in Lite SSD BWR tag",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401fa0000023c050218800321000002110303440110024e0105450000f900034f000002110303440110024e0105450000f900034f00000124000302110303440110024e0105450000f900034f000002110303440110024e0105450000f900034f000002110303440110024e0105450000f900034f000001260003032100000222f70120000102110303440110024e0105450000f900034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000101000000ffffffffffffffff0000000000000000a200011200010401fa0000023c050218800321000002110303440110024e0105450000f900034f000002110303440110024e0105450000f900034f00000124000302110303440110024e0105450000f900034f000002110303440110024e0105450000f900034f000002110303440110024e0105450000f900034f000001260003032100000222f70120000102110303440110024e0105450000f900034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   }
+  },
+  "0xE020": {
+   "panel_ic_type": 57376,
+   "name": "SSD1619_420_BWY",
+   "aliases": [],
+   "notes": [
+    "same drive as 0xE002 (SSD1619_420_BWR) with colour scheme 2; the same 2.x panel_ic_type 1001: pick by the panel's colour",
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Checked on glass"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 400,
+   "height": 300,
+   "legacy": {
+    "color_scheme": 1,
+    "pixel_width": 400,
+    "pixel_height": 300
+   },
+   "color_scheme": 2,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 4.2in SSD BWY tag",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 2,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032100000222f70120000102110303440031024e00054500002b01034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032100000222f70120000102110303440031024e00054500002b01034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x21",
+     "from": "08 00",
+     "to": "00 00",
+     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "same drive as 0xE002 (SSD1619_420_BWR) with colour scheme 2; the same 2.x panel_ic_type 1001: pick by the panel's colour"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321080002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032108000222f70120000102110303440031024e00054500002b01034f000000010000"
+      }
+     ],
+     "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321080002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032108000222f70120000102110303440031024e00054500002b01034f000000010000",
+     "drive_bytes": 233,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
+  },
+  "0xE101": {
+   "panel_ic_type": 57601,
+   "name": "M3_2.2in_BWR_160x296",
+   "aliases": [],
+   "notes": [
+    "extracted, not cross-checked: op list transcribed, not compiled",
+    "T1: plane 0 inversion moved into 0x21 BW RAM option (XOR 0x08); datasheet-derived, needs a glass check",
+    "T5: the hardware reset before the sleep commands is left out (the panel is awake after a refresh)",
+    "deliberately differs from its source: 0x11 01 -> 03 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x45 28 01 00 00 -> 00 00 27 01 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass",
+    "deliberately differs from its source: 0x4F 27 01 -> 00 00 (SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip). Checked on glass"
+   ],
+   "source": "op list (extracted, not cross-checked)",
+   "width": 160,
+   "height": 296,
+   "legacy": {
+    "color_scheme": 1,
+    "pixel_width": 160,
+    "pixel_height": 296
+   },
+   "color_scheme": 1,
+   "status": "glass",
+   "verified": "glass 2026-11-13: 2.2in EL022H3WRA 160x296 tag (provisioned as 2.x 1020)",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 1,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 67,
+     "steps": 22,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff0000000102030109011300010210030000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110305450000270103440114023c0502188003210000024e01034f000001240003024e01034f0000012600030222f7012000010000"
+    }
+   ],
+   "framed_hex": "00b11600000100ffff000000010203010901130001021003000000ae6800000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110305450000270103440114023c0502188003210000024e01034f000001240003024e01034f0000012600030222f7012000010000",
+   "drive_bytes": 134,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x11",
+     "from": "01",
+     "to": "03",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x45",
+     "from": "28 01 00 00",
+     "to": "00 00 27 01",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    },
+    {
+     "cmd": "0x4F",
+     "from": "27 01",
+     "to": "00 00",
+     "reason": "SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): the source drew the wire image mirrored and rotated 180 degrees, a vertical flip"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "extracted",
+     "verified": "extracted",
+     "notes": [
+      "extracted, not cross-checked: op list transcribed, not compiled",
+      "T1: plane 0 inversion moved into 0x21 BW RAM option (XOR 0x08); datasheet-derived, needs a glass check",
+      "T5: the hardware reset before the sleep commands is left out (the panel is awake after a refresh)"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff0000000102030109011300010210030000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110105452801000003440114023c0502188003210000024e01034f270101240003024e01034f2701012600030222f7012000010000"
+      }
+     ],
+     "framed_hex": "00b11600000100ffff000000010203010901130001021003000000ae6800000066756c6c00000000000000000101000000ffffffffffffffff000000000000000043000112000100050a00040128010002110105452801000003440114023c0502188003210000024e01034f270101240003024e01034f2701012600030222f7012000010000",
+     "drive_bytes": 134,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (op list (extracted, not cross-checked))"
+    }
+   ]
+  }
+ },
+ "native_controllers": {}
+}

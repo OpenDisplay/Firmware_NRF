@@ -12,12 +12,13 @@ This is a fork of [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) for co
 
 - **Low Power Operation**: Optimized for minimal power consumption with deep sleep support
 - **BLE Communication**: Bluetooth Low Energy for wireless updates and configuration
-- **Multiple Display Support**: Supports UC81xx and SSD16xx series e-paper displays
+- **Config-driven displays**: panels are driven from drive packets in the config (UC81xx and SSD16xx families)
 - **Direct Write Mode**: Bufferless image transfer for efficient memory usage
 - **OTA Updates**: Over-the-air firmware updates via BLE DFU
 - **Button Support**: Interrupt-based button handling with press counting
 - **LED Control**: RGB LED support with configurable flash patterns
 - **Battery Monitoring**: Built-in battery voltage reading via ADC
+- **NFC**: an I2C NFC tag chip (NXP NTAG I2C plus or TNB132M) set up by the config; NDEF read and write over BLE, field detect in the advertisement and as a wake source
 
 ## Supported Hardware
 
@@ -25,10 +26,29 @@ This is a fork of [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) for co
 - nRF52811 (primary target)
 
 ### E-Paper Displays
-- UC81xx series (UC8176, UC8179, etc.)
-- SSD16xx series (SSD1680, SSD1681, etc.)
-- Custom pin mapping support
-- Multiple color schemes (B/W, B/W+Red, B/W+Yellow)
+
+Firmware 3.0 has no built-in panel drivers. A panel is driven by the drive packets in its config
+(0xB1 panel, 0xAE refresh mode), run by the shared OpenDisplay drive chain in `od/`.
+
+`presets/drive_presets_nrf52811.json` holds the presets for this target. Only presets that were
+checked on a real panel ship (status `glass`):
+
+| Key | Panel |
+|---|---|
+| 0xE002 | 4.2in SSD BWR 400x300 |
+| 0xE007 | 7.5in UC8179 BWR 800x480 (sold as 7.4in) |
+| 0xE00F | 2.9in UC8151 BWR 168x384 |
+| 0xE011 | 2.9in SSD BWR 168x384 |
+| 0xE013 | 1.6in SSD BWR 200x200 |
+| 0xE019 | 2.7in UC8151 BWR 200x300 |
+| 0xE01B | 4.3in UCVAR43 BWR 152x522 |
+| 0xE01D | 1.3in SSD BWR 144x200 |
+| 0xE01F | 2.2in Lite SSD BWR 128x250 |
+| 0xE020 | 4.2in SSD BWY 400x300 |
+| 0xE101 | 2.2in BWR 160x296 |
+
+`tools/gen_presets.py` regenerates the file. `host/tests/run.sh KEY` checks that a preset's bus
+traffic matches its replay.
 
 ## Building
 
@@ -55,13 +75,16 @@ To build a complete firmware package including bootloader and softdevice:
 
 ```bash
 cd build-nrf52
-make full KEY_FILE=/path/to/priv.pem
+make GENERATE_OTA=1
 ```
 
 This generates:
 - `_build/EPD-nRF52-full.hex` - Complete firmware
-- `_build/EPD-nRF52-ota.zip` - Signed OTA package
+- `_build/EPD-nRF52-ota.zip` - Signed OTA package (only with `GENERATE_OTA=1`; needs nrfutil)
 - `_build/EPD-nRF52-settings.hex` - Bootloader settings
+
+The DFU signing key defaults to `tools/priv.pem`; `KEY_FILE=/absolute/path` overrides it. It must match the
+bootloader's public key.
 
 ## Flashing
 
@@ -84,6 +107,8 @@ The firmware uses a TLV (Type-Length-Value) based configuration system that supp
 - Button configuration (pin mapping, debounce settings)
 - Sensor configuration
 - Data bus configuration
+- NFC configuration (0x2A, on an I2C data bus)
+- External flash (0x2B): the first enabled FlashConfig's MOSI/SCK/CS; the flash is sent the deep power-down command (0xB9) at boot, after every config write and before System OFF, and CS is held high
 - Power options
 
 Configuration can be written via BLE using the OpenDisplay protocol. See the [OpenDisplay documentation](https://opendisplay.org/) for protocol details.
@@ -101,6 +126,27 @@ The firmware implements the OpenDisplay BLE protocol standard. Key commands incl
 - `0x0073` - LED activate
 - `0x0043` - Firmware version
 - `0x000F` - Reboot
+- `0x0083` - NFC endpoint: read or write the NDEF record (single or chunked)
+
+### Deep sleep wake
+
+`0x0053` DEEP_SLEEP enters System OFF. Every configured button (0x25) wakes the tag at its pressed level, and so does the NFC field-detect pin. After such a wake:
+- the boot screen is drawn, as after any start;
+- the button that woke the tag (from the GPIO LATCH register, or still held) is advertised as its first press, so the host sees which button woke the tag.
+
+### NFC
+
+`glue/od_nrf_nfc.c`, built unless `make OD_CAP_NFC=0` (about 4 KB of flash).
+
+- The first NFC config (0x2A) with flags bit0 set is used. Its `bus_instance` names an I2C data bus (0x24): `pin_1` SCL, `pin_2` SDA, and `pin_3` the chip's power pin when `power_pin` is 0xFF. Pins are GPIO numbers.
+- `nfc_ic_type` 0 (auto) probes an NXP NTAG I2C plus at address 0x55, and otherwise uses the TNB132M flow. 1 forces TNB132M, and 3 forces NTAG I2C plus (target-local value, not yet in the protocol header).
+- The chip is powered only for a session, waiting `power_on_delay_ms` (default 40 ms). A session runs at boot, on every config write, and for each 0x0083 request.
+- On an NTAG, the NDEF TLV goes in user blocks 0x01 to 0x37, with block 1 written last. Block 0 (I2C address, lock and capability bytes) and the configuration and lock blocks are never written.
+- `0x0083` has the same sub-commands, statuses, NACK codes and check order as the other 3.0 targets. A read returns at most 218 bytes; a chunked write takes up to 512.
+- Field detect: `field_detect_mode` 1 polls the pin and 2 adds a pin interrupt. Each active edge increments a 7-bit counter, and `dynamicreturndata[adv_button_byte_index]` = state | counter << 1 is advertised at once.
+  - The pull follows the active level: pull-up when active low.
+  - Before System OFF the pin is armed as a wake source.
+  - A phone switches its field on and off many times while it reads; `field_detect_debounce_ms` 255 counts about one tap per touch. A change held back by the debounce is taken on a later pass, not lost.
 
 See the [OpenDisplay protocol documentation](https://opendisplay.org/) for complete protocol specifications.
 
@@ -127,11 +173,14 @@ make ENABLE_RTT=1
 
 ### Versioning
 
-Firmware version can be set during build:
+The version is set once, in `build-nrf52/Makefile` (`MAJOR_VERSION`, `MINOR_VERSION`, `PATCH_VERSION`), and the
+git short SHA of the tree is detected at build time (with `-dirty` for uncommitted changes). Both go into the
+generated `_build/od_nrf_build_id.h`, which FIRMWARE_VERSION (0x0043) and the boot screen ("FW:N 3.0.0") read.
+They can be overridden:
 
 ```bash
 cd build-nrf52
-make MAJOR_VERSION=2 MINOR_VERSION=5 SHA_VALUE=abc123def456
+make MAJOR_VERSION=3 MINOR_VERSION=1 PATCH_VERSION=2 SHA=abc1234
 ```
 
 ## License
