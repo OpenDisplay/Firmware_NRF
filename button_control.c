@@ -58,6 +58,8 @@ void button_init(void) {
         }
     }
     
+    const uint32_t woke = NRF_P0->LATCH;   /* pins whose SENSE hit, e.g. the System OFF wake */
+    NRF_P0->LATCH = woke;                   /* write 1 to clear */
     buttonStateCount = 0;
     
     for (uint8_t i = 0; i < MAX_BUTTONS; i++) {
@@ -157,15 +159,16 @@ void button_init(void) {
             btn->pull = hasPullup ? NRF_GPIO_PIN_PULLUP
                       : hasPulldown ? NRF_GPIO_PIN_PULLDOWN : NRF_GPIO_PIN_NOPULL;
             buttonStateCount++;
-            /* Held at start-up, as after a wake from System OFF by this button: advertise it as
-             * the first press, so the host sees which button woke the tag. */
-            if (btn->current_state == 1u) {
+            /* Held at start-up, or latched as the pin that woke the tag from System OFF (LATCH
+             * keeps the SENSE hit through the wake): advertise it as the first press, so the
+             * host sees which button woke the tag. */
+            if (btn->current_state == 1u || (woke & (1uL << pin)) != 0u) {
                 btn->press_count = 1;
                 btn->last_press_time = timestamp();
                 dynamicreturndata[btn->byte_index] =
                     (uint8_t)((btn->button_id & BUTTON_ID_MASK) |
                               ((btn->press_count & PRESS_COUNT_MASK) << PRESS_COUNT_SHIFT) |
-                              ((1u & BUTTON_STATE_MASK) << BUTTON_STATE_SHIFT));
+                              ((btn->current_state & BUTTON_STATE_MASK) << BUTTON_STATE_SHIFT));
             }
         }
     }
