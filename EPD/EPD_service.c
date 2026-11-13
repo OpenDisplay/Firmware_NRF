@@ -232,6 +232,7 @@ static void config_reload(void)
 #if OD_CAP_NFC
     od_nrf_nfc_init(g);
 #endif
+    od_nrf_flash_init(g);
     updatemsdata();
 }
 
@@ -657,9 +658,6 @@ void ble_epd_sleep_prepare(ble_epd_t *p_epd)
 {
     (void)p_epd;
     xfer_abort();
-#if OD_CAP_NFC
-    od_nrf_nfc_sleep_arm();   /* every path into System OFF comes through here */
-#endif
 }
 
 uint32_t ble_epd_init(ble_epd_t *p_epd)

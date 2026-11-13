@@ -25,6 +25,8 @@ struct GlobalConfig {
     uint8_t binary_input_count;
     struct NfcConfig nfc_configs[2];
     uint8_t nfc_config_count;
+    struct FlashConfig flash_configs[2];
+    uint8_t flash_config_count;
     uint8_t version;            // Protocol version
     uint8_t minor_version;      // Protocol minor version
     bool loaded;                // True if config was successfully loaded

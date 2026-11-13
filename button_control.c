@@ -154,7 +154,19 @@ void button_init(void) {
             nrf_drv_gpiote_in_event_enable(pin, true);
             
             btn->initialized = true;
+            btn->pull = hasPullup ? NRF_GPIO_PIN_PULLUP
+                      : hasPulldown ? NRF_GPIO_PIN_PULLDOWN : NRF_GPIO_PIN_NOPULL;
             buttonStateCount++;
+            /* Held at start-up, as after a wake from System OFF by this button: advertise it as
+             * the first press, so the host sees which button woke the tag. */
+            if (btn->current_state == 1u) {
+                btn->press_count = 1;
+                btn->last_press_time = timestamp();
+                dynamicreturndata[btn->byte_index] =
+                    (uint8_t)((btn->button_id & BUTTON_ID_MASK) |
+                              ((btn->press_count & PRESS_COUNT_MASK) << PRESS_COUNT_SHIFT) |
+                              ((1u & BUTTON_STATE_MASK) << BUTTON_STATE_SHIFT));
+            }
         }
     }
 }
@@ -224,5 +236,19 @@ void process_button_events(void) {
     
     if (!is_ble_active()) {
         advertising_restart_with_updated_msd();
+    }
+}
+
+void button_sleep_arm(void) {
+    for (uint8_t i = 0; i < buttonStateCount; i++) {
+        ButtonState* btn = &buttonStates[i];
+        if (!btn->initialized) {
+            continue;
+        }
+        /* The GPIOTE IN channel does not run in System OFF; the pin's SENSE does. */
+        nrf_drv_gpiote_in_uninit(btn->pin);
+        btn->initialized = false;
+        nrf_gpio_cfg_sense_input(btn->pin, (nrf_gpio_pin_pull_t)btn->pull,
+                                 btn->inverted ? NRF_GPIO_PIN_SENSE_LOW : NRF_GPIO_PIN_SENSE_HIGH);
     }
 }

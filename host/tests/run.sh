@@ -34,7 +34,7 @@ FLAGS=$(cd "$REPO/build-nrf52" && make --no-print-directory \
 FLAGS=$(echo "$FLAGS" | sed -e "s|-I\.\./|-I$REPO/|g" -e "s|-I\.\. |-I$REPO |")
 SRC="$HERE/test_service.c $HERE/fds_sim.c $REPO/EPD/EPD_service.c $REPO/glue/od_nrf_config.c
      $REPO/glue/od_nrf_display.c $REPO/glue/od_nrf_bootguard.c $REPO/qr/qrcode.c
-     $REPO/glue/od_nrf_nfc.c $HERE/fake_i2c.c"
+     $REPO/glue/od_nrf_nfc.c $REPO/glue/od_nrf_flash.c $HERE/fake_i2c.c"
 for m in od_epd od_epd_cfg od_cfg_index od_display od_color od_config_store od_config_tlv \
          od_config_asm od_advert od_cmd_spi_raw; do
   SRC="$SRC $REPO/od/core/$m.c"

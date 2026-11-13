@@ -86,6 +86,7 @@ The firmware uses a TLV (Type-Length-Value) based configuration system that supp
 - Sensor configuration
 - Data bus configuration
 - NFC configuration (0x2A, on an I2C data bus)
+- External flash (0x2B): the first enabled FlashConfig's MOSI/SCK/CS; the flash is sent the deep power-down command (0xB9) at boot, after every config write and before System OFF, and CS is held high
 - Power options
 
 Configuration can be written via BLE using the OpenDisplay protocol. See the [OpenDisplay documentation](https://opendisplay.org/) for protocol details.
@@ -104,6 +105,12 @@ The firmware implements the OpenDisplay BLE protocol standard. Key commands incl
 - `0x0043` - Firmware version
 - `0x000F` - Reboot
 - `0x0083` - NFC endpoint: read or write the NDEF record (single or chunked)
+
+### Deep sleep wake
+
+`0x0053` DEEP_SLEEP enters System OFF. Every configured button (0x25) wakes the tag at its pressed level, and so does the NFC field-detect pin. After such a wake:
+- the boot screen is not redrawn, so the panel keeps its image;
+- a button still held is advertised as its first press, so the host sees which button woke the tag.
 
 ### NFC
 

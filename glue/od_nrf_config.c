@@ -64,6 +64,9 @@ static bool parse_cb(void *ctx, uint8_t id, od_span_t body)
     case 0x2A:
         PUT_SLOT(g->nfc_configs, g->nfc_config_count, 2u, body);
         break;
+    case 0x2B:
+        PUT_SLOT(g->flash_configs, g->flash_config_count, 2u, body);
+        break;
     default:
         break;   /* 0x26/0x27 and everything else: sized by the walker, not used here */
     }

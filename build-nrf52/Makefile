@@ -56,6 +56,7 @@ SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_nvs.c
 SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_display.c
 SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_config.c
 SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_bootguard.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_flash.c
 # NFC (0x2A config, 0x0083): an I2C tag chip, glue/od_nrf_nfc.c. OD_CAP_NFC=0 leaves it out.
 # Defined here, before the ifeq reads it.
 OD_CAP_NFC ?= 1

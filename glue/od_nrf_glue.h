@@ -48,6 +48,10 @@ void od_nrf_boot_screen(void);          /* draw the boot screen if drivable; blo
 uint16_t od_nrf_ident(uint8_t *out, uint16_t cap);              /* READ_IDENT frame */
 void od_nrf_msd(uint8_t out[16], uint8_t loop_counter, bool reboot_flag);
 
+/* ---- external SPI flash (od_nrf_flash.c): deep power-down from the 0x2B config ------------ */
+void od_nrf_flash_init(const struct GlobalConfig *g);   /* boot and every config reload */
+void od_nrf_flash_sleep(void);                          /* before System OFF */
+
 /* ---- DFU strand guard (od_nrf_bootguard.c) -------------------------------------------------- */
 uint8_t od_nrf_bootguard_next(uint8_t prev, bool *enter_dfu);   /* pure */
 void od_nrf_bootguard_boot(void);        /* early in main(): count this boot */
