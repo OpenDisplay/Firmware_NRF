@@ -8,7 +8,8 @@
  * What runs: the opcode table and reply bytes, READ_IDENT and MSD bytes, config write/read/clear
  * (single and chunked, oversize, unknown legacy packet, secrets, busy during a refresh), the
  * upload without and with drive packets through a refresh, SPI_RAW, the oversize-frame NACK,
- * the boot guard, and config storage across a power cut at every flash step. */
+ * the boot guard, config storage across a power cut at every flash step, and NFC (0x2A, 0x0083)
+ * against an emulated NTAG I2C plus and TNB132M. */
 #include <setjmp.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -89,7 +90,8 @@ void EPD_WriteData(uint8_t *p, uint8_t n)
     fputc('\n', g_bus);
 }
 void host_gpio_write(uint32_t pin, uint32_t level) { (void)pin; (void)level; }
-uint32_t host_gpio_read(uint32_t pin) { (void)pin; return g_busy_level; }
+static uint32_t g_fd_level;   /* the NFC field-detect pin (test_nfc.inc) */
+uint32_t host_gpio_read(uint32_t pin) { return pin == 11u ? g_fd_level : g_busy_level; }
 
 /* ---- SoftDevice -------------------------------------------------------------------------------- */
 #define MAXRX 8192
@@ -260,6 +262,9 @@ static void make_drivable(struct blob *x)
 }
 
 /* ---- tests ----------------------------------------------------------------------------------- */
+
+#include "od_nrf_nfc.h"
+#include "test_nfc.inc"
 
 static void test_opcode_table(void)
 {
@@ -659,6 +664,7 @@ int main(void)
     test_spi_raw();
     test_bootguard();
     test_power_cuts();
+    test_nfc();
     printf("test_service: %d passed, %d failed (image bytes %d)\n", g_pass, g_fail, g_img_bytes);
     return g_fail ? 1 : 0;
 }

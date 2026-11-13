@@ -22,6 +22,9 @@
 #include "od_drive_app.h"
 #include "od_hal_nvs.h"
 #include "od_nrf_glue.h"
+#if OD_CAP_NFC
+#include "od_nrf_nfc.h"
+#endif
 #include "od_reply.h"
 #include "od_spi_raw_app.h"
 #include "od_xfer.h"
@@ -226,6 +229,9 @@ static void config_reload(void)
     }
     od_nrf_bind_display(g);
     s_epd->display_config = g->display_count > 0u ? &g->displays[0] : NULL;
+#if OD_CAP_NFC
+    od_nrf_nfc_init(g);
+#endif
     updatemsdata();
 }
 
@@ -468,6 +474,13 @@ static void handle_spi_raw(const uint8_t *body, uint16_t len)
 }
 #endif
 
+#if OD_CAP_NFC
+static void nfc_send(const uint8_t *frame, uint16_t len)
+{
+    (void)send_response(s_epd, frame, len);
+}
+#endif
+
 static void dispatch_command(uint16_t cmd, const uint8_t *body, uint16_t len)
 {
     switch (cmd) {
@@ -484,6 +497,9 @@ static void dispatch_command(uint16_t cmd, const uint8_t *body, uint16_t len)
     case CMD_LED_ACTIVATE:       handle_led_activate(body, len); break;
 #if OD_CAP_SPI_RAW
     case CMD_SPI_RAW:            handle_spi_raw(body, len); break;
+#endif
+#if OD_CAP_NFC
+    case CMD_NFC_ENDPOINT:       od_nrf_nfc_frame(body, len, nfc_send); break;
 #endif
     case CMD_AUTHENTICATE: {
         /* No security module: the 3.0 answer is NOT_CONFIG, so a v1 client learns there is
@@ -570,6 +586,9 @@ void ble_epd_on_ble_evt(ble_epd_t *p_epd, ble_evt_t *e)
         p_epd->is_notification_enabled = false;
         s_rd.active = false;
         od_config_asm_reset(&g_od_cfg_ws);
+#if OD_CAP_NFC
+        od_nrf_nfc_disconnected();
+#endif
         if (!ble_epd_refresh_busy()) {
             xfer_abort();
 #if OD_CAP_SPI_RAW
@@ -638,6 +657,9 @@ void ble_epd_sleep_prepare(ble_epd_t *p_epd)
 {
     (void)p_epd;
     xfer_abort();
+#if OD_CAP_NFC
+    od_nrf_nfc_sleep_arm();   /* every path into System OFF comes through here */
+#endif
 }
 
 uint32_t ble_epd_init(ble_epd_t *p_epd)

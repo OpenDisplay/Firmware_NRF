@@ -18,6 +18,7 @@ This is a fork of [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) for co
 - **Button Support**: Interrupt-based button handling with press counting
 - **LED Control**: RGB LED support with configurable flash patterns
 - **Battery Monitoring**: Built-in battery voltage reading via ADC
+- **NFC**: an I2C NFC tag chip (NXP NTAG I2C plus or TNB132M) set up by the config; NDEF read and write over BLE, field detect in the advertisement and as a wake source
 
 ## Supported Hardware
 
@@ -84,6 +85,7 @@ The firmware uses a TLV (Type-Length-Value) based configuration system that supp
 - Button configuration (pin mapping, debounce settings)
 - Sensor configuration
 - Data bus configuration
+- NFC configuration (0x2A, on an I2C data bus)
 - Power options
 
 Configuration can be written via BLE using the OpenDisplay protocol. See the [OpenDisplay documentation](https://opendisplay.org/) for protocol details.
@@ -101,6 +103,20 @@ The firmware implements the OpenDisplay BLE protocol standard. Key commands incl
 - `0x0073` - LED activate
 - `0x0043` - Firmware version
 - `0x000F` - Reboot
+- `0x0083` - NFC endpoint: read or write the NDEF record (single or chunked)
+
+### NFC
+
+`glue/od_nrf_nfc.c`, built unless `make OD_CAP_NFC=0` (about 4 KB of flash).
+
+- The first NFC config (0x2A) with flags bit0 set is used. Its `bus_instance` names an I2C data bus (0x24): `pin_1` SCL, `pin_2` SDA, and `pin_3` the chip's power pin when `power_pin` is 0xFF. Pins are GPIO numbers.
+- `nfc_ic_type` 0 (auto) probes an NXP NTAG I2C plus at address 0x55, and otherwise uses the TNB132M flow. 1 forces TNB132M, and 3 forces NTAG I2C plus (target-local value, not yet in the protocol header).
+- The chip is powered only for a session, waiting `power_on_delay_ms` (default 40 ms). A session runs at boot, on every config write, and for each 0x0083 request.
+- On an NTAG, the NDEF TLV goes in user blocks 0x01 to 0x37, with block 1 written last. Block 0 (I2C address, lock and capability bytes) and the configuration and lock blocks are never written.
+- `0x0083` has the same sub-commands, statuses, NACK codes and check order as the other 3.0 targets. A read returns at most 218 bytes; a chunked write takes up to 512.
+- Field detect: `field_detect_mode` 1 polls the pin and 2 adds a pin interrupt. Each active edge increments a 7-bit counter, and `dynamicreturndata[adv_button_byte_index]` = state | counter << 1 is advertised at once.
+  - The pull follows the active level: pull-up when active low.
+  - Before System OFF the pin is armed as a wake source.
 
 See the [OpenDisplay protocol documentation](https://opendisplay.org/) for complete protocol specifications.
 

@@ -37,6 +37,9 @@
 #include "nrf_power.h"
 #include "nrf_pwr_mgmt.h"
 #include "structs.h"
+#if OD_CAP_NFC
+#include "od_nrf_nfc.h"
+#endif
 
 #define CENTRAL_LINK_COUNT              0                                               /**< Number of central links used by the application. When changing this number remember to adjust the RAM settings*/
 #define PERIPHERAL_LINK_COUNT           1                                               /**< Number of peripheral links used by the application. When changing this number remember to adjust the RAM settings*/
@@ -726,6 +729,14 @@ static void idle_state_handle(void) {
         od_nrf_bootguard_served();
     }
     process_button_events();
+#if OD_CAP_NFC
+    if (od_nrf_nfc_process()) {   /* an NFC field came or went: advertise it */
+        updatemsdata();
+        if (!is_ble_active()) {
+            advertising_restart_with_updated_msd();
+        }
+    }
+#endif
     nrf_pwr_mgmt_run();
 }
 
@@ -755,6 +766,9 @@ int main(void) {
     updatemsdata();
     led_init();
     button_init();
+#if OD_CAP_NFC
+    od_nrf_nfc_init(&globalConfig);
+#endif
     if (globalConfig.display_count > 0) {
         m_epd.display_config = &globalConfig.displays[0];
     } else {

@@ -33,7 +33,8 @@ FLAGS=$(cd "$REPO/build-nrf52" && make --no-print-directory \
         --eval='hostflags: ; @echo $(filter -D%,$(CFLAGS)) $(addprefix -I,$(INC_FOLDERS))' hostflags)
 FLAGS=$(echo "$FLAGS" | sed -e "s|-I\.\./|-I$REPO/|g" -e "s|-I\.\. |-I$REPO |")
 SRC="$HERE/test_service.c $HERE/fds_sim.c $REPO/EPD/EPD_service.c $REPO/glue/od_nrf_config.c
-     $REPO/glue/od_nrf_display.c $REPO/glue/od_nrf_bootguard.c $REPO/qr/qrcode.c"
+     $REPO/glue/od_nrf_display.c $REPO/glue/od_nrf_bootguard.c $REPO/qr/qrcode.c
+     $REPO/glue/od_nrf_nfc.c $HERE/fake_i2c.c"
 for m in od_epd od_epd_cfg od_cfg_index od_display od_color od_config_store od_config_tlv \
          od_config_asm od_advert od_cmd_spi_raw; do
   SRC="$SRC $REPO/od/core/$m.c"
@@ -41,7 +42,7 @@ done
 
 build() { # cc extra-flags exe
   # shellcheck disable=SC2086
-  $1 -std=gnu99 -O1 -g -w $2 -DSVCALL_AS_NORMAL_FUNCTION -DOD_BOOTGUARD_HOST_TEST \
+  $1 -std=gnu99 -O1 -g -w $2 -DSVCALL_AS_NORMAL_FUNCTION -DOD_BOOTGUARD_HOST_TEST -DOD_NRF_HOST_TEST \
      -I"$HERE/stubs" -I"$HERE" -I"$OUT" $FLAGS $SRC -o "$3"
 }
 

@@ -56,6 +56,13 @@ SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_nvs.c
 SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_display.c
 SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_config.c
 SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_bootguard.c
+# NFC (0x2A config, 0x0083): an I2C tag chip, glue/od_nrf_nfc.c. OD_CAP_NFC=0 leaves it out.
+# Defined here, before the ifeq reads it.
+OD_CAP_NFC ?= 1
+ifeq ($(OD_CAP_NFC),1)
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_nfc.c
+SRC_FILES += $(PROJECT_ROOT)/glue/od_nrf_i2c.c
+endif
 
 # Source files - GUI
 # GUI files removed - not used in current implementation (only MODE_PICTURE supported)
@@ -216,10 +223,11 @@ CFLAGS += -DS112
 CFLAGS += -DOD_CONFIG_MAX_SIZE=2000u
 CFLAGS += -DOD_CAP_LOG=0
 CFLAGS += -DOD_EPD_WITH_WINDOW=0
-CFLAGS += -DOD_CAP_PIPE=0 -DOD_CAP_PARTIAL=0 -DOD_CAP_DUAL_CS=0 -DOD_CAP_RXQ=0 -DOD_CAP_NFC=0
+CFLAGS += -DOD_CAP_PIPE=0 -DOD_CAP_PARTIAL=0 -DOD_CAP_DUAL_CS=0 -DOD_CAP_RXQ=0
 CFLAGS += -DOD_CAP_READ_IDENT=1
 OD_CAP_SPI_RAW ?= 1
 CFLAGS += -DOD_CAP_SPI_RAW=$(OD_CAP_SPI_RAW)
+CFLAGS += -DOD_CAP_NFC=$(OD_CAP_NFC)
 CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -D__HEAP_SIZE=8192
 CFLAGS += -D__STACK_SIZE=2048
