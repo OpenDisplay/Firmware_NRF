@@ -8,8 +8,11 @@
     hwtest_nrf52811.py upload  ADDR [--pattern bars|checker|white|black|colour] [--fast]
     hwtest_nrf52811.py spiraw  ADDR
     hwtest_nrf52811.py negative ADDR                      the refusals: unknown opcode, oversize, ...
+                                                          (sends a config write the firmware must refuse;
+                                                          run `backup` first)
     hwtest_nrf52811.py restore ADDR --from cfg.bin
-    hwtest_nrf52811.py dfu     ADDR --zip EPD-nRF52-ota.zip  (Secure DFU, FE59)
+    hwtest_nrf52811.py dfu     ADDR --zip EPD-nRF52-ota.zip  (Secure DFU, FE59; flashes only the
+                                                          bootloader at ADDR or ADDR+1)
 
 `config` keeps every packet of the stored config (pins, LEDs, buttons, ...) and replaces only
 the drive packets (0xAE..0xB1) with the preset's, then patches display 0's width, height and
@@ -297,18 +300,25 @@ async def do_dfu(addr: str, zpath: Path):
     except Exception:   # noqa: BLE001 - the device resets
         pass
     if not r or r[0][:2] != b"\x00\x51":
-        print("  no ENTER_DFU ack; trying anyway")
-    print("  scanning for the DFU bootloader (FE59)...")
+        raise SystemExit("no ENTER_DFU ack; not scanning for a bootloader")
+    # Only this tag's bootloader: the Nordic bootloader advertises at the app address or at the
+    # address + 1. Any other DFU advertiser nearby is ignored, never flashed.
+    base = int(addr.replace(":", ""), 16)
+    mine = {f"{v:012X}" for v in (base, (base + 1) & 0xFFFFFFFFFFFF)}
+    print(f"  scanning for the DFU bootloader (FE59) of {addr}...")
     dev = None
     for _ in range(20):
         found = await BleakScanner.discover(timeout=2.0, return_adv=True)
         for dv, adv in found.values():
-            if DFU_SVC in [u.lower() for u in adv.service_uuids] or (dv.name or "") == "DfuTarg":
+            is_dfu = DFU_SVC in [u.lower() for u in adv.service_uuids] or (dv.name or "") == "DfuTarg"
+            if is_dfu and dv.address.replace(":", "").upper() in mine:
                 dev = dv
+            elif is_dfu:
+                print(f"  ignoring another DFU advertiser {dv.address} {dv.name}")
         if dev:
             break
     if not dev:
-        raise SystemExit("no DFU target found; use nRF Connect with the zip instead")
+        raise SystemExit("this tag's DFU bootloader was not found; use nRF Connect with the zip instead")
     print(f"  DFU target {dev.address} {dev.name}")
     with zipfile.ZipFile(zpath) as z:
         man = json.loads(z.read("manifest.json"))["manifest"]["application"]

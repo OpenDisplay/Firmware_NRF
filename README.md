@@ -12,7 +12,7 @@ This is a fork of [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) for co
 
 - **Low Power Operation**: Optimized for minimal power consumption with deep sleep support
 - **BLE Communication**: Bluetooth Low Energy for wireless updates and configuration
-- **Multiple Display Support**: Supports UC81xx and SSD16xx series e-paper displays
+- **Config-driven displays**: panels are driven from drive packets in the config (UC81xx and SSD16xx families)
 - **Direct Write Mode**: Bufferless image transfer for efficient memory usage
 - **OTA Updates**: Over-the-air firmware updates via BLE DFU
 - **Button Support**: Interrupt-based button handling with press counting
@@ -26,10 +26,29 @@ This is a fork of [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) for co
 - nRF52811 (primary target)
 
 ### E-Paper Displays
-- UC81xx series (UC8176, UC8179, etc.)
-- SSD16xx series (SSD1680, SSD1681, etc.)
-- Custom pin mapping support
-- Multiple color schemes (B/W, B/W+Red, B/W+Yellow)
+
+Firmware 3.0 has no built-in panel drivers. A panel is driven by the drive packets in its config
+(0xB1 panel, 0xAE refresh mode), run by the shared OpenDisplay drive chain in `od/`.
+
+`presets/drive_presets_nrf52811.json` holds the presets for this target. Only presets that were
+checked on a real panel ship (status `glass`):
+
+| Key | Panel |
+|---|---|
+| 0xE002 | 4.2in SSD BWR 400x300 |
+| 0xE007 | 7.5in UC8179 BWR 800x480 (sold as 7.4in) |
+| 0xE00F | 2.9in UC8151 BWR 168x384 |
+| 0xE011 | 2.9in SSD BWR 168x384 |
+| 0xE013 | 1.6in SSD BWR 200x200 |
+| 0xE019 | 2.7in UC8151 BWR 200x300 |
+| 0xE01B | 4.3in UCVAR43 BWR 152x522 |
+| 0xE01D | 1.3in SSD BWR 144x200 |
+| 0xE01F | 2.2in Lite SSD BWR 128x250 |
+| 0xE020 | 4.2in SSD BWY 400x300 |
+| 0xE101 | 2.2in BWR 160x296 |
+
+`tools/gen_presets.py` regenerates the file. `host/tests/run.sh KEY` checks that a preset's bus
+traffic matches its replay.
 
 ## Building
 
@@ -56,13 +75,16 @@ To build a complete firmware package including bootloader and softdevice:
 
 ```bash
 cd build-nrf52
-make full KEY_FILE=/path/to/priv.pem
+make GENERATE_OTA=1
 ```
 
 This generates:
 - `_build/EPD-nRF52-full.hex` - Complete firmware
-- `_build/EPD-nRF52-ota.zip` - Signed OTA package
+- `_build/EPD-nRF52-ota.zip` - Signed OTA package (only with `GENERATE_OTA=1`; needs nrfutil)
 - `_build/EPD-nRF52-settings.hex` - Bootloader settings
+
+The DFU signing key defaults to `tools/priv.pem`; `KEY_FILE=/absolute/path` overrides it. It must match the
+bootloader's public key.
 
 ## Flashing
 
