@@ -774,13 +774,13 @@ int main(void) {
     ble_options_set();
 #endif
     (void)od_nrf_config_load(&globalConfig);
-    updatemsdata();
     led_init();
     button_init();
 #if OD_CAP_NFC
     od_nrf_nfc_init(&globalConfig);
 #endif
     od_nrf_flash_init(&globalConfig);
+    updatemsdata();   /* after the inputs: the first advert carries the button that woke the tag */
     if (globalConfig.display_count > 0) {
         m_epd.display_config = &globalConfig.displays[0];
     } else {
