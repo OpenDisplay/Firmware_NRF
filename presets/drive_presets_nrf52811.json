@@ -1263,8 +1263,8 @@
     "model_id": 15
    },
    "color_scheme": 1,
-   "status": "equivalent",
-   "verified": "equivalent",
+   "status": "glass",
+   "verified": "glass 2026-11-13: two 2.9in UC8151 BWR tags",
    "blocked_on": [],
    "modes": [
     {
@@ -2287,7 +2287,8 @@
    "aliases": [],
    "notes": [
     "T2: bare data 00 after a busy wait is sent with cmd 0x04, before that wait",
-    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+    "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms",
+    "deliberately differs from its source: 0x00 03 09 -> 0f 09 (UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; the source value drew the image upside down). Checked on glass"
    ],
    "source": "2.x C driver, compiled and captured",
    "width": 200,
@@ -2300,8 +2301,8 @@
     "model_id": 25
    },
    "color_scheme": 1,
-   "status": "equivalent",
-   "verified": "equivalent",
+   "status": "glass",
+   "verified": "glass 2026-11-13: 2.7in UC8151 BWR tag",
    "blocked_on": [],
    "modes": [
     {
@@ -2330,10 +2331,10 @@
     {
      "id": 174,
      "number": 0,
-     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461c8012c0204000001011000030113000301040001011200056400000100010000"
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c02505703000f090461c8012c0204000001011000030113000301040001011200056400000100010000"
     }
    ],
-   "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c8000005c800000000ae5c00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461c8012c0204000001011000030113000301040001011200056400000100010000",
+   "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c8000005c800000000ae5c00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c02505703000f090461c8012c0204000001011000030113000301040001011200056400000100010000",
    "drive_bytes": 130,
    "equivalence": {
     "0": {
@@ -2348,7 +2349,51 @@
    },
    "fits_target": {
     "nrf52811": true
-   }
+   },
+   "deviations": [
+    {
+     "cmd": "0x00",
+     "from": "03 09",
+     "to": "0f 09",
+     "reason": "UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; the source value drew the image upside down"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "T2: bare data 00 after a busy wait is sent with cmd 0x04, before that wait",
+      "T3: 2.x held reset 50 ms per phase; od_epd_begin_pass holds 10 ms"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000101ffff0000000102030111010200010207a50005c8000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461c8012c0204000001011000030113000301040001011200056400000100010000"
+      }
+     ],
+     "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c8000005c800000000ae5c00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000003700024d5502f30a0231000406e5353c025057030003090461c8012c0204000001011000030113000301040001011200056400000100010000",
+     "drive_bytes": 130,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
   },
   "0xE01A": {
    "panel_ic_type": 57370,
@@ -4051,7 +4096,7 @@
    "notes": [
     "extracted, not cross-checked: op list transcribed, not compiled",
     "same glass as 2.x panel_ic_type 1024",
-    "deliberately differs from its source: 0x00 07 09 00 -> 03 09 00 (UC8151 scan direction: PSR SHL cleared (03 instead of 07), the orientation of 0xE019, which is correct on glass; the source value mirrors left-right). Needs a glass check"
+    "deliberately differs from its source: 0x00 07 09 00 -> 0f 09 00 (UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; the source value drew the image upside down). Needs a glass check"
    ],
    "source": "op list (extracted, not cross-checked)",
    "width": 200,
@@ -4093,10 +4138,10 @@
     {
      "id": 174,
      "number": 0,
-     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000002800024d5502f30a0231000406e5353c0250570400030900011000030113000301040001011200010000"
+     "body_hex": "000066756c6c00000000000000000101000000ffffffffffffffff00000000000000002800024d5502f30a0231000406e5353c02505704000f0900011000030113000301040001011200010000"
     }
    ],
-   "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c80000050100000000ae4d00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000002800024d5502f30a0231000406e5353c0250570400030900011000030113000301040001011200010000",
+   "framed_hex": "00b11e00000101ffff0000000102030111010200010207a50005c80000050100000000ae4d00000066756c6c00000000000000000101000000ffffffffffffffff00000000000000002800024d5502f30a0231000406e5353c02505704000f0900011000030113000301040001011200010000",
    "drive_bytes": 115,
    "equivalence": {
     "0": {
@@ -4116,8 +4161,8 @@
     {
      "cmd": "0x00",
      "from": "07 09 00",
-     "to": "03 09 00",
-     "reason": "UC8151 scan direction: PSR SHL cleared (03 instead of 07), the orientation of 0xE019, which is correct on glass; the source value mirrors left-right"
+     "to": "0f 09 00",
+     "reason": "UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; the source value drew the image upside down"
     }
    ],
    "alternatives": [

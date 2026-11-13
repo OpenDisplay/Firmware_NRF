@@ -281,8 +281,14 @@ DEVIATIONS: dict[int, list[tuple[int, int, int | bytes, str]]] = {
        for k in (0xE002, 0xE00B, 0xE011, 0xE013, 0xE015, 0xE017, 0xE020)},
     **{k: [(0x21, 0, 0x40, _SSD_POL)]
        for k in (0xE004, 0xE00A, 0xE010, 0xE012, 0xE014, 0xE016)},
-    **{k: [(0x00, 0, 0x03, _UC8151_SHL)] for k in (0xE10F, 0xE110, 0xE111)},
+    **{k: [(0x00, 0, 0x03, _UC8151_SHL)] for k in (0xE10F, 0xE111)},
 }
+# The 2.7in UC8151 (E019, and E110 for the same panel) is mounted the other way round: PSR UD and
+# SHL both set (0F) rotates the source's 03 by 180 degrees.
+_UC8151_ROT = ("UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; "
+               "the source value drew the image upside down")
+DEVIATIONS[0xE019] = [(0x00, 0, 0x0F, _UC8151_ROT)]
+DEVIATIONS[0xE110] = [(0x00, 0, 0x0F, _UC8151_ROT)]
 # E007: CDI 30 07 -> 31 07 (data byte 0 is BDZ/BDV/N2OCP/DDX).
 DEVIATIONS[0xE007] = [(0x50, 0, 0x31, _UC8179_POL)]
 # Y flip: rows 0..H-1 increasing instead of H..0 decreasing (the source's 0x45 start is H, not H-1).
@@ -295,6 +301,8 @@ DEVIATIONS[0xE101] = [(0x11, 0, 0x03, _SSD_YFLIP), (0x45, 0, bytes.fromhex("0000
 # key -> where. Their status is "glass".
 GLASS: dict[int, str] = {
     0xE002: "glass 2026-11-13: two 4.2in SSD BWR tags",
+    0xE00F: "glass 2026-11-13: two 2.9in UC8151 BWR tags",
+    0xE019: "glass 2026-11-13: 2.7in UC8151 BWR tag",
     0xE013: "glass 2026-11-13: 1.6in SSD BWR tag",
     0xE01D: "glass 2026-11-13: 1.3in SSD BWR tag",
     0xE01F: "glass 2026-11-13: 2.2in Lite SSD BWR tag",
