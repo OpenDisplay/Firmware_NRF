@@ -65,6 +65,7 @@
   "SSD1619_013_BWR": "0xE01D",
   "SSD1619_022_LITE_BW": "0xE01E",
   "SSD1619_022_LITE_BWR": "0xE01F",
+  "SSD1619_420_BWY": "0xE020",
   "M3_1.6in_BWR_200x200_Lite": "0xE100",
   "M3_2.2in_BWR_160x296": "0xE101",
   "M3_2.2in_BW_160x296": "0xE102",
@@ -2821,6 +2822,123 @@
    "fits_target": {
     "nrf52811": true
    }
+  },
+  "0xE020": {
+   "panel_ic_type": 57376,
+   "name": "SSD1619_420_BWY",
+   "aliases": [],
+   "notes": [
+    "same drive as 0xE002 (SSD1619_420_BWR) with colour scheme 2; the same 2.x panel_ic_type 1001: pick by the panel's colour",
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check",
+    "deliberately differs from its source: 0x21 08 00 -> 00 00 (SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image). Needs a glass check"
+   ],
+   "source": "2.x C driver, compiled and captured",
+   "width": 400,
+   "height": 300,
+   "legacy": {
+    "color_scheme": 1,
+    "pixel_width": 400,
+    "pixel_height": 300
+   },
+   "color_scheme": 2,
+   "status": "corrected",
+   "verified": "untested",
+   "blocked_on": [],
+   "modes": [
+    {
+     "index": 0,
+     "name": "full",
+     "refresh": "full",
+     "passes": 1,
+     "color_scheme": 2,
+     "planes": 2,
+     "window": false,
+     "seq_bytes": 162,
+     "steps": 46,
+     "fits": {
+      "nrf52811": true
+     }
+    }
+   ],
+   "modes_blocked": [],
+   "requires_escapes": [],
+   "packets": [
+    {
+     "id": 177,
+     "number": 0,
+     "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+    },
+    {
+     "id": 174,
+     "number": 0,
+     "body_hex": "000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032100000222f70120000102110303440031024e00054500002b01034f000000010000"
+    }
+   ],
+   "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032100000222f70120000102110303440031024e00054500002b01034f000000010000",
+   "drive_bytes": 233,
+   "equivalence": {
+    "0": {
+     "rc": 0,
+     "equal": true
+    },
+    "sleep": {
+     "rc": 0,
+     "equal": true
+    },
+    "all_equal": true
+   },
+   "fits_target": {
+    "nrf52811": true
+   },
+   "deviations": [
+    {
+     "cmd": "0x21",
+     "from": "08 00",
+     "to": "00 00",
+     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+    },
+    {
+     "cmd": "0x21",
+     "from": "08 00",
+     "to": "00 00",
+     "reason": "SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 = white / 1 = colour planes; the source value inverted the image"
+    }
+   ],
+   "alternatives": [
+    {
+     "status": "equivalent",
+     "verified": "equivalent",
+     "notes": [
+      "same drive as 0xE002 (SSD1619_420_BWR) with colour scheme 2; the same 2.x panel_ic_type 1001: pick by the panel's colour"
+     ],
+     "packets": [
+      {
+       "id": 177,
+       "number": 0,
+       "body_hex": "000100ffff000000010203010d021001000564000005c8000000"
+      },
+      {
+       "id": 174,
+       "number": 0,
+       "body_hex": "000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321080002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032108000222f70120000102110303440031024e00054500002b01034f000000010000"
+      }
+     ],
+     "framed_hex": "00b11a00000100ffff000000010203010d021001000564000005c800000000aec700000066756c6c00000000000000000201000000ffffffffffffffff0000000000000000a2000112000104012c0100023c050218800321080002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f00000124000302110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000002110303440031024e00054500002b01034f000001260003032108000222f70120000102110303440031024e00054500002b01034f000000010000",
+     "drive_bytes": 233,
+     "equivalence": {
+      "0": {
+       "rc": 0,
+       "equal": true
+      },
+      "sleep": {
+       "rc": 0,
+       "equal": true
+      },
+      "all_equal": true
+     },
+     "name": "as the source (2.x C driver, compiled and captured)"
+    }
+   ]
   },
   "0xE100": {
    "panel_ic_type": 57600,

@@ -273,7 +273,7 @@ _UC8151_SHL = ("UC8151 scan direction: PSR SHL cleared (03 instead of 07), the o
 # key -> [(cmd, byte index, new value, reason)]; every occurrence of cmd is changed.
 DEVIATIONS: dict[int, list[tuple[int, int, int, str]]] = {
     **{k: [(0x21, 0, 0x00, _SSD_POL)]
-       for k in (0xE002, 0xE00B, 0xE011, 0xE013, 0xE015, 0xE017)},
+       for k in (0xE002, 0xE00B, 0xE011, 0xE013, 0xE015, 0xE017, 0xE020)},
     **{k: [(0x21, 0, 0x40, _SSD_POL)]
        for k in (0xE004, 0xE00A, 0xE010, 0xE012, 0xE014, 0xE016)},
     **{k: [(0x00, 0, 0x03, _UC8151_SHL)] for k in (0xE10F, 0xE110, 0xE111)},
@@ -382,7 +382,13 @@ def _entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
     return e
 
 
-def from_capture(mid: int, colour: int, ic: int, w: int, h: int) -> dict:
+# Same glass and drive as a 2.x model, other colour: (key, base 2.x model id, name, 3.0 scheme).
+# 2.x had no BWY; a 4.2in 1001 tag with yellow particles is this panel.
+VARIANTS = [(0xE020, 2, "SSD1619_420_BWY", 2)]
+
+
+def from_capture(mid: int, colour: int, ic: int, w: int, h: int, *, key: int | None = None,
+                 name: str | None = None, scheme: int | None = None) -> dict:
     lines = subprocess.run([str(CAPTURE), str(mid)], capture_output=True, text=True,
                            check=True).stdout.splitlines()
     cut = lines.index("S")
@@ -402,7 +408,12 @@ def from_capture(mid: int, colour: int, ic: int, w: int, h: int) -> dict:
                              "known polarity register")
     if hold and hold != 10:
         notes.append(f"T3: 2.x held reset {hold} ms per phase; od_epd_begin_pass holds 10 ms")
-    scheme = SCHEME[colour]
+    variant = scheme is not None
+    scheme = SCHEME[colour] if scheme is None else scheme
+    key = 0xE000 + mid if key is None else key
+    if variant:
+        notes.append(f"same drive as 0x{0xE000 + mid:04X} ({NAMES[mid]}) with colour scheme "
+                     f"{scheme}; the same 2.x panel_ic_type {999 + mid}: pick by the panel's colour")
     if scheme == 3:
         per = (w + 7) // 8 * h
         notes.append(f"T4: 2.x wrote {per} B (1 bit/px) per BWRY frame; 3.0 writes the full "
@@ -410,7 +421,11 @@ def from_capture(mid: int, colour: int, ic: int, w: int, h: int) -> dict:
     idle = 0 if fam == "SSD" else 1
     legacy = {"panel_ic_type": 999 + mid, "color_scheme": 0 if colour == 1 else 1 if colour == 2
               else 3, "pixel_width": w, "pixel_height": h, "model_id": mid}
-    return build_entry(0xE000 + mid, NAMES[mid], w, h, scheme, idle, mode_steps, sleep_steps,
+    if variant:
+        # Not a migration target: 2.x stored this panel as the base model, so an automatic legacy
+        # match must keep landing on the base preset. The variant is chosen by hand.
+        legacy = {k: v for k, v in legacy.items() if k not in ("panel_ic_type", "model_id")}
+    return build_entry(key, name or NAMES[mid], w, h, scheme, idle, mode_steps, sleep_steps,
                        notes, blocked, legacy, "2.x C driver, compiled and captured",
                        "equivalent")
 
@@ -550,6 +565,10 @@ def main() -> int:
         mid, colour, ic, w, h = (int(x) for x in ln.split())
         e = from_capture(mid, colour, ic, w, h)
         panels[f"0x{e['panel_ic_type']:04X}"] = e
+        for vkey, vmid, vname, vscheme in VARIANTS:
+            if vmid == mid:
+                e = from_capture(mid, colour, ic, w, h, key=vkey, name=vname, scheme=vscheme)
+                panels[f"0x{e['panel_ic_type']:04X}"] = e
     if a.extra:
         doc = json.loads(a.extra.read_text())
         pick = {int(x) for x in a.extra_only.split(",") if x}
