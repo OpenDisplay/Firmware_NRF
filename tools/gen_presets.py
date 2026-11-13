@@ -21,7 +21,11 @@
    equivalence result. Nothing here is forced to match the 2.x driver. A preset whose packets
    were checked on a real panel (GLASS) is "glass".
 
---extra takes models described as op lists (cmd / delay_ms / wait_busy / reset / pixel_data /
+5. Only "glass" presets are written out. Everything else (untested 2.x models and op-list models)
+   is generated for the replay check and then dropped, so a preset ships only once it has been
+   seen right on a real panel. Add its key to GLASS to ship it.
+
+--extra takes models described as op lists (each with an optional "key", else 0xE100 + index) (cmd / delay_ms / wait_busy / reset / pixel_data /
 data). Those were not compiled from source, so they are marked "extracted, not cross-checked":
 the replay proves the packets encode the op list, not that the op list is right.
 
@@ -268,8 +272,6 @@ _SSD_POL = ("SSD RAM polarity: 0x21 RAM options set to normal for the wire's 1 =
             "1 = colour planes; the source value inverted the image")
 _UC8179_POL = ("UC8179 data polarity: CDI DDX[0] set so DTM1 bit 1 = white, the wire's "
                "convention; the source value inverted the BW plane")
-_UC8151_SHL = ("UC8151 scan direction: PSR SHL cleared (03 instead of 07), the orientation of "
-               "0xE019, which is correct on glass; the source value mirrors left-right")
 
 _SSD_YFLIP = ("SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F start from row 0): "
               "the source drew the wire image mirrored and rotated 180 degrees, a vertical flip")
@@ -277,18 +279,13 @@ _SSD_YFLIP = ("SSD gate scan reversed (0x11 Y increment, 0x45 window and 0x4F st
 # key -> [(cmd, byte index, new value, reason)]; every occurrence of cmd is changed. A bytes value
 # replaces the data from that index on.
 DEVIATIONS: dict[int, list[tuple[int, int, int | bytes, str]]] = {
-    **{k: [(0x21, 0, 0x00, _SSD_POL)]
-       for k in (0xE002, 0xE00B, 0xE011, 0xE013, 0xE015, 0xE017, 0xE020)},
-    **{k: [(0x21, 0, 0x40, _SSD_POL)]
-       for k in (0xE004, 0xE00A, 0xE010, 0xE012, 0xE014, 0xE016)},
-    **{k: [(0x00, 0, 0x03, _UC8151_SHL)] for k in (0xE10F, 0xE111)},
+    **{k: [(0x21, 0, 0x00, _SSD_POL)] for k in (0xE002, 0xE011, 0xE013, 0xE020)},
 }
-# The 2.7in UC8151 (E019, and E110 for the same panel) is mounted the other way round: PSR UD and
-# SHL both set (0F) rotates the source's 03 by 180 degrees.
+# The 2.7in UC8151 (E019) is mounted the other way round: PSR UD and SHL both set (0F) rotates
+# the source's 03 by 180 degrees.
 _UC8151_ROT = ("UC8151 scan direction: PSR UD and SHL set (0F): the 2.7in panel is mounted rotated; "
                "the source value drew the image upside down")
 DEVIATIONS[0xE019] = [(0x00, 0, 0x0F, _UC8151_ROT)]
-DEVIATIONS[0xE110] = [(0x00, 0, 0x0F, _UC8151_ROT)]
 # E007: CDI 30 07 -> 31 07 (data byte 0 is BDZ/BDV/N2OCP/DDX).
 DEVIATIONS[0xE007] = [(0x50, 0, 0x31, _UC8179_POL)]
 # Y flip: rows 0..H-1 increasing instead of H..0 decreasing (the source's 0x45 start is H, not H-1).
@@ -607,7 +604,8 @@ def from_oplist(k: int, m: dict) -> dict:
     legacy = {"color_scheme": scheme, "pixel_width": w, "pixel_height": h}
     if m.get("nrf_ic_type"):
         legacy["panel_ic_type"] = int(m["nrf_ic_type"])
-    return build_entry(0xE100 + k, m["name"], int(w), int(h), scheme, idle, clean, sleep_steps,
+    key = int(m["key"], 16) if m.get("key") else 0xE100 + k
+    return build_entry(key, m["name"], int(w), int(h), scheme, idle, clean, sleep_steps,
                        notes, blocked, legacy, "op list (extracted, not cross-checked)",
                        "extracted")
 
@@ -638,7 +636,9 @@ def main() -> int:
                 continue
             e = from_oplist(k, m)
             panels[f"0x{e['panel_ic_type']:04X}"] = e
-    panels = dict(sorted(panels.items()))
+    built = len(panels)
+    panels = {k: e for k, e in sorted(panels.items()) if e["status"] == "glass"}
+    print(f"{len(panels)} of {built} presets checked on glass; only those are written")
     out = {
         "schema": "opendisplay.drive_presets",
         "schema_version": 1,
