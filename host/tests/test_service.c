@@ -280,11 +280,13 @@ static void test_opcode_table(void)
     CHECK(LAST(0xFF, 0x52, 0x00, 0x00));
     tx(CMD_FIRMWARE_VERSION, NULL, 0);
     CHECK(g_rx[g_nrx - 1][0] == 0x00 && g_rx[g_nrx - 1][1] == 0x43 && g_rx[g_nrx - 1][2] == 3);
-    /* [00][43][major][minor][len][sha]: the build's version and git SHA, not a placeholder */
+    /* [00][43][major][minor][len][sha][patch]: the build's version and git SHA, not a
+     * placeholder, and the patch byte after the SHA (W4) */
     CHECK(g_rx[g_nrx - 1][2] == OD_NRF_FW_MAJOR && g_rx[g_nrx - 1][3] == OD_NRF_FW_MINOR &&
           g_rx[g_nrx - 1][4] == strlen(OD_NRF_FW_SHA) &&
-          g_rx_len[g_nrx - 1] == 5u + strlen(OD_NRF_FW_SHA) &&
-          memcmp(&g_rx[g_nrx - 1][5], OD_NRF_FW_SHA, strlen(OD_NRF_FW_SHA)) == 0);
+          g_rx_len[g_nrx - 1] == 6u + strlen(OD_NRF_FW_SHA) &&
+          memcmp(&g_rx[g_nrx - 1][5], OD_NRF_FW_SHA, strlen(OD_NRF_FW_SHA)) == 0 &&
+          g_rx[g_nrx - 1][5 + strlen(OD_NRF_FW_SHA)] == OD_NRF_FW_PATCH);
     tx(CMD_READ_MSD, NULL, 0);
     CHECK(g_rx_len[g_nrx - 1] == 18 && g_rx[g_nrx - 1][1] == RESP_MSD_READ);
     {

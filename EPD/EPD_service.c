@@ -410,7 +410,7 @@ static void handle_config_read(void)
 static void handle_firmware_version(void)
 {
     static const char sha[] = OD_NRF_FW_SHA;
-    uint8_t r[2 + 3 + 40];
+    uint8_t r[2 + 3 + 40 + 1];
     uint16_t n = 0;
     const uint8_t sl = (uint8_t)(sizeof sha - 1u > 40u ? 40u : sizeof sha - 1u);
     const uint8_t major = OD_NRF_FW_MAJOR, minor = OD_NRF_FW_MINOR;
@@ -422,6 +422,7 @@ static void handle_firmware_version(void)
     r[n++] = sl;
     memcpy(r + n, sha, sl);
     n = (uint16_t)(n + sl);
+    r[n++] = OD_NRF_FW_PATCH;   /* [patch] after the SHA, as the protocol asks of newer firmware */
     (void)send_response(s_epd, r, n);
 }
 

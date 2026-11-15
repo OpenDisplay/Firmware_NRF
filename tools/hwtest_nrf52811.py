@@ -139,7 +139,8 @@ async def do_ident(d: Dev):
     fw = await d.cmd(0x0043)
     if fw and len(fw[0]) >= 5:
         f = fw[0]
-        print(f"  firmware {f[2]}.{f[3]} sha {f[5:5 + f[4]].decode(errors='replace')}")
+        patch = f[5 + f[4]] if len(f) > 5 + f[4] else 0   # [patch] after the SHA; absent = 0
+        print(f"  firmware {f[2]}.{f[3]}.{patch} sha {f[5:5 + f[4]].decode(errors='replace')}")
     r = await d.cmd(0x0046)
     print("  READ_IDENT", json.dumps(decode_ident(r[0])) if r else "none")
     m = await d.cmd(0x0044)
