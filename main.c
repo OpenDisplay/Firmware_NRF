@@ -197,15 +197,6 @@ void app_feed_wdt(void) {
     }
 }
 
-void opendisplay_comm_pump(void) {
-    app_feed_wdt();
-#if defined(S112)
-    nrf_sdh_evts_poll();
-#else
-    app_sched_execute();
-#endif
-}
-
 #if defined(S112)
 static void buttonless_dfu_sdh_state_observer(nrf_sdh_state_evt_t state, void* p_context) {
     if (state == NRF_SDH_EVT_STATE_DISABLED) {

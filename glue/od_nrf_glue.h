@@ -56,6 +56,5 @@ void od_nrf_flash_sleep(void);                          /* before System OFF */
 uint8_t od_nrf_bootguard_next(uint8_t prev, bool *enter_dfu);   /* pure */
 void od_nrf_bootguard_boot(void);        /* early in main(): count this boot */
 void od_nrf_bootguard_served(void);      /* a GATT request was served: the app is healthy */
-void od_nrf_bootguard_stack_failed(void);/* BLE stack init failed: go to DFU */
 
 #endif /* OD_NRF_GLUE_H */

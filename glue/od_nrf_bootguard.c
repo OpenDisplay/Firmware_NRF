@@ -63,10 +63,4 @@ void od_nrf_bootguard_served(void)
         (void)sd_power_gpregret_clr(0, 0xFFu);
     }
 }
-
-void od_nrf_bootguard_stack_failed(void)
-{
-    NRF_POWER->GPREGRET = OD_BOOTGUARD_DFU;
-    NVIC_SystemReset();
-}
 #endif
