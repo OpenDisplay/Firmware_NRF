@@ -509,20 +509,6 @@ static void test_config_rules(void)
         const int first = g_nrx;
         g_hvx_full_after = 2;
         tx(CMD_CONFIG_READ, NULL, 0);
-        /* W1: while the read streams, config writes and clear are refused as busy, so the
-         * read-back never mixes two records. (One notification slot is freed for the NACK.) */
-        {
-            const uint8_t tiny[4] = { 0x10, 0x00, 0x00, 0x00 };
-            const int before = g_nrx;
-            g_hvx_full_after = 1;
-            tx(CMD_CONFIG_WRITE, tiny, sizeof tiny);
-            CHECK(g_nrx == before + 1 && LAST(0xFF, 0x41, OD_ERR_CONFIG_WRITE_BUSY, 0x00));
-            g_hvx_full_after = 1;
-            tx(CMD_CONFIG_CLEAR, NULL, 0);
-            CHECK(g_nrx == before + 2 && LAST(0xFF, 0x45, OD_ERR_CONFIG_WRITE_BUSY, 0x00));
-            g_nrx = before;   /* the read-back below parses only 0x40 frames */
-            g_hvx_full_after = 0;
-        }
         while (g_hvx_full_after == 0) {
             g_hvx_full_after = 2;
             evt(BLE_GATTS_EVT_HVN_TX_COMPLETE);
@@ -663,6 +649,43 @@ static int cut_sweep(const struct blob *pre, int npre, const struct blob *old, c
     return cuts;
 }
 
+/* W1: while a CONFIG_READ streams (here: stalled on a full notification queue), config writes
+ * and clear are refused as busy, so the read-back never mixes two records. A full-size record
+ * needs several chunks whatever the preset. */
+static void test_read_blocks_writes(void)
+{
+    struct blob b;
+    const uint8_t tiny[4] = { 0x10, 0x00, 0x00, 0x00 };
+    uint32_t got = 0;
+
+    big_config(&b, 0x5A);
+    CHECK(write_config(&b) == RESP_ACK);
+    const int first = g_nrx;
+    g_hvx_full_after = 1;
+    tx(CMD_CONFIG_READ, NULL, 0);
+    CHECK(g_nrx == first + 1);
+    g_hvx_full_after = 1;
+    tx(CMD_CONFIG_WRITE, tiny, sizeof tiny);
+    CHECK(g_nrx == first + 2 && LAST(0xFF, 0x41, OD_ERR_CONFIG_WRITE_BUSY, 0x00));
+    g_hvx_full_after = 1;
+    tx(CMD_CONFIG_CLEAR, NULL, 0);
+    CHECK(g_nrx == first + 3 && LAST(0xFF, 0x45, OD_ERR_CONFIG_WRITE_BUSY, 0x00));
+    g_hvx_full_after = 0;
+    while (g_hvx_full_after == 0) {
+        g_hvx_full_after = 2;
+        evt(BLE_GATTS_EVT_HVN_TX_COMPLETE);
+    }
+    g_hvx_full_after = -1;
+    for (int i = first; i < g_nrx; i++) {
+        if (g_rx[i][0] == 0x00 && g_rx[i][1] == 0x40) {
+            got += g_rx_len[i] - ((g_rx[i][2] | g_rx[i][3] << 8) == 0 ? 6u : 4u);
+        }
+    }
+    CHECK(got == b.n);
+    /* The read is done: writes are taken again. */
+    CHECK(write_config(&b) == RESP_ACK);
+}
+
 static void test_power_cuts(void)
 {
     struct blob a, b, c;
@@ -714,6 +737,7 @@ int main(void)
     test_set_pin_levels();
     test_bootguard();
     test_power_cuts();
+    test_read_blocks_writes();
     test_nfc();
     printf("test_service: %d passed, %d failed (image bytes %d)\n", g_pass, g_fail, g_img_bytes);
     return g_fail ? 1 : 0;
