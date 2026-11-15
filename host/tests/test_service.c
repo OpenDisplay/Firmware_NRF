@@ -497,6 +497,20 @@ static void test_config_rules(void)
         const int first = g_nrx;
         g_hvx_full_after = 2;
         tx(CMD_CONFIG_READ, NULL, 0);
+        /* W1: while the read streams, config writes and clear are refused as busy, so the
+         * read-back never mixes two records. (One notification slot is freed for the NACK.) */
+        {
+            const uint8_t tiny[4] = { 0x10, 0x00, 0x00, 0x00 };
+            const int before = g_nrx;
+            g_hvx_full_after = 1;
+            tx(CMD_CONFIG_WRITE, tiny, sizeof tiny);
+            CHECK(g_nrx == before + 1 && LAST(0xFF, 0x41, OD_ERR_CONFIG_WRITE_BUSY, 0x00));
+            g_hvx_full_after = 1;
+            tx(CMD_CONFIG_CLEAR, NULL, 0);
+            CHECK(g_nrx == before + 2 && LAST(0xFF, 0x45, OD_ERR_CONFIG_WRITE_BUSY, 0x00));
+            g_nrx = before;   /* the read-back below parses only 0x40 frames */
+            g_hvx_full_after = 0;
+        }
         while (g_hvx_full_after == 0) {
             g_hvx_full_after = 2;
             evt(BLE_GATTS_EVT_HVN_TX_COMPLETE);

@@ -211,10 +211,13 @@ static void run_refresh(void)
 
 /* ---- config (0x0040 / 0x0041 / 0x0042 / 0x0045) -------------------------------------------------- */
 
-/* A config write must not change the record a pass is reading drive packets from. */
+static bool config_read_active(void);
+
+/* A config write must not change the record a pass is reading drive packets from, nor the record
+ * a CONFIG_READ is streaming (the read pump reads flash in place, chunk by chunk). */
 static bool config_busy(void)
 {
-    return ble_epd_refresh_busy() || s_x.active || od_display_active();
+    return ble_epd_refresh_busy() || s_x.active || od_display_active() || config_read_active();
 }
 
 static void config_reload(void)
@@ -318,6 +321,11 @@ static struct {
     uint32_t off;
     uint16_t chunk;
 } s_rd;
+
+static bool config_read_active(void)
+{
+    return s_rd.active;
+}
 
 static void config_read_pump(void)
 {
