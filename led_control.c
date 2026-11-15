@@ -1,4 +1,5 @@
 #include "led_control.h"
+#include "od_nrf_glue.h"
 #include "constants.h"
 #include "EPD_driver.h"
 #include "structs.h"
@@ -65,6 +66,19 @@ void flashLed(uint8_t color, uint8_t brightness) {
     }
 }
 
+/* F6: a pattern runs at most LED_FLASH_MAX_MS. It runs inside the BLE event handler, so an
+ * endless or very long pattern (255 repeats, delays up to 25.5 s) would stop the tag answering and,
+ * with a plain busy wait, end in a watchdog reset. od_nrf_delay_ms() feeds the watchdog. */
+#define LED_FLASH_MAX_MS 10000u
+static uint32_t s_led_budget;
+
+static bool led_wait(uint32_t ms) {
+    const uint32_t k = ms < s_led_budget ? ms : s_led_budget;
+    od_nrf_delay_ms(k);
+    s_led_budget -= k;
+    return s_led_budget > 0u;
+}
+
 void ledFlashLogic(void) {
     if (!ledFlashActive) {
         return;
@@ -100,6 +114,7 @@ void ledFlashLogic(void) {
         uint8_t ildelay2 = ledcfg[6];
         uint8_t ildelay3 = ledcfg[9];
         uint8_t grouprepeats = ledcfg[10] + 1;
+        s_led_budget = LED_FLASH_MAX_MS;
         while (ledFlashActive) {
             if (ledFlashPosition >= grouprepeats && grouprepeats != 255) {
                 brightness = 0;
@@ -108,25 +123,26 @@ void ledFlashLogic(void) {
                 break;
             }
             
-            for (uint8_t i = 0; i < loopcnt1; i++) {
+            bool more = true;
+            for (uint8_t i = 0; more && i < loopcnt1; i++) {
                 flashLed(c1, brightness);
-                hal_delay_ms(loop1delay * loopdelayfactor);
+                more = led_wait(loop1delay * loopdelayfactor);
             }
-            hal_delay_ms(ildelay1 * interloopdelayfactor);
-            
-            for (uint8_t i = 0; i < loopcnt2; i++) {
+            more = more && led_wait(ildelay1 * interloopdelayfactor);
+            for (uint8_t i = 0; more && i < loopcnt2; i++) {
                 flashLed(c2, brightness);
-                hal_delay_ms(loop2delay * loopdelayfactor);
+                more = led_wait(loop2delay * loopdelayfactor);
             }
-            hal_delay_ms(ildelay2 * interloopdelayfactor);
-            
-            for (uint8_t i = 0; i < loopcnt3; i++) {
+            more = more && led_wait(ildelay2 * interloopdelayfactor);
+            for (uint8_t i = 0; more && i < loopcnt3; i++) {
                 flashLed(c3, brightness);
-                hal_delay_ms(loop3delay * loopdelayfactor);
+                more = led_wait(loop3delay * loopdelayfactor);
             }
-            hal_delay_ms(ildelay3 * interloopdelayfactor);
-            
+            more = more && led_wait(ildelay3 * interloopdelayfactor);
             ledFlashPosition++;
+            if (!more) {
+                break;   /* time budget used up */
+            }
         }
     }
 }
