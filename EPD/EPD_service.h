@@ -62,6 +62,8 @@ typedef struct {
 /* Work that must not run in the BLE event handler: the refresh after DIRECT_WRITE_END and the
  * config-read chunks that did not fit the SoftDevice's notification queue. Call from main(). */
 void ble_epd_service_run(ble_epd_t* p_epd);
+/* The part of ble_epd_service_run() after the refresh: deferred config saves and power actions. */
+void ble_epd_service_deferred(void);
 bool ble_epd_refresh_busy(void);
 #define EPD_GUI_SCHD_EVENT_DATA_SIZE 8
 

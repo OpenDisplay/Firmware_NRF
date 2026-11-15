@@ -23,6 +23,7 @@
 #include "main.h"
 #include "od_advert.h"
 #include "od_drive_app.h"
+#include "od_spi_raw_app.h"
 #include "od_epd_cfg.h"
 #include "od_config_store.h"
 #include "od_nrf_glue.h"
@@ -47,6 +48,7 @@ struct GlobalConfig globalConfig;
 uint8_t dynamicreturndata[11];
 uint8_t rebootFlag = 1;
 static int g_dfu, g_reset, g_sleep, g_served;
+static int g_gpio_up;   /* panel power: +1 per init, -1 per uninit */
 static uint32_t g_now;
 
 void updatemsdata(void) {}
@@ -78,8 +80,8 @@ static uint32_t g_busy_level; /* what the BUSY pin reads */
 static int g_gpio_inits;
 
 void EPD_GPIO_Load_DisplayConfig(struct DisplayConfig *c, struct GlobalConfig *g) { (void)c; (void)g; }
-void EPD_GPIO_Init(void) { g_gpio_inits++; }
-void EPD_GPIO_Uninit(void) {}
+void EPD_GPIO_Init(void) { g_gpio_inits++; g_gpio_up++; }
+void EPD_GPIO_Uninit(void) { g_gpio_up--; }
 void EPD_WriteCmd(uint8_t c)
 {
     if (g_bus) fprintf(g_bus, "C %02x\n", c);
@@ -163,6 +165,7 @@ static int tx(uint16_t cmd, const uint8_t *body, uint16_t n)
     f[1] = (uint8_t)cmd;
     if (n) memcpy(f + 2, body, n);
     write_handle(m_epd.char_handles.value_handle, f, (uint16_t)(n + 2u));
+    ble_epd_service_deferred();   /* what main() does next: saves and power actions */
     return g_nrx - before;
 }
 
@@ -189,6 +192,7 @@ static void reboot(void)
     fds_sim_reboot();
     s_init = false;
     s_pending = false;
+    (void)ble_epd_init(&m_epd);   /* the service's RAM state (pending saves, actions) is gone */
     memset(&globalConfig, 0, sizeof globalConfig);
     od_nrf_config_load(&globalConfig);
     m_epd.display_config = globalConfig.display_count ? &globalConfig.displays[0] : NULL;
@@ -401,8 +405,14 @@ static void test_upload(void)
         tx(CMD_DIRECT_WRITE_START, NULL, 0);
         CHECK(LAST(0xFF, 0x70, OD_ERR_PANEL_BUSY, 0x00));
     }
+    /* F2: DEEP_SLEEP during a pending refresh is acknowledged, then waits for the refresh; the
+     * tag sleeps afterwards with the panel powered down. */
+    g_sleep = 0;
+    tx(CMD_DEEP_SLEEP, NULL, 0);
+    CHECK(LAST(0x00, 0x53) && g_sleep == 0);
     ble_epd_service_run(&m_epd);
-    CHECK(LAST(0x00, 0x73));
+    CHECK(g_nrx >= 2 && g_rx[g_nrx - 1][0] == 0x00 && g_rx[g_nrx - 1][1] == 0x73);
+    CHECK(g_sleep == 1 && g_gpio_up == 0);
     if (g_bus) fclose(g_bus);
     g_bus = NULL;
 }
@@ -539,6 +549,13 @@ static void test_spi_raw(void)
     const uint8_t cmd[3] = { SPI_RAW_SUB_CMD, 0x12 };
     const uint8_t busy[3] = { SPI_RAW_SUB_BUSY, 100, 0 };
     const uint8_t close[1] = { SPI_RAW_SUB_CLOSE };
+
+    /* F2: DEEP_SLEEP with SPI_RAW open closes it and powers the panel down first. */
+    tx(CMD_SPI_RAW, open, 2);
+    CHECK(LAST(0x00, 0x84, SPI_RAW_SUB_OPEN) && opendisplay_display_spi_raw_is_open());
+    g_sleep = 0;
+    tx(CMD_DEEP_SLEEP, NULL, 0);
+    CHECK(g_sleep == 1 && !opendisplay_display_spi_raw_is_open() && g_gpio_up == 0);
 
     tx(CMD_SPI_RAW, open, 2);
     CHECK(LAST(0x00, 0x84, SPI_RAW_SUB_OPEN));

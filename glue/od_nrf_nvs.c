@@ -12,9 +12,11 @@
  * between the two leaves both valid. The newest (highest record_id) is the live one; init deletes
  * the others, so the reader never sees two.
  *
- * WRITES BLOCK. The 2.x firmware already waited for the FDS completion event by pumping the
- * SoftDevice event queue, and this keeps that behaviour (od_config_store expects a synchronous
- * write). An out-of-space update runs one garbage collection and retries once. */
+ * WRITES BLOCK, FROM main() ONLY. od_config_store expects a synchronous write, so each FDS
+ * operation waits for its completion event. That event is delivered by the SoftDevice event
+ * interrupt, which preempts main(); the wait therefore only polls a flag. It must never run inside
+ * the BLE event handler (the interrupt cannot preempt itself): EPD_service.c hands config saves to
+ * main() for that reason. An out-of-space update runs one garbage collection and retries once. */
 #include "od_hal_nvs.h"
 
 #include <string.h>
@@ -51,7 +53,7 @@ static int wait_evt(void)
     uint32_t waited = 0u;
 
     while (s_pending && waited < NVS_WAIT_MS) {
-        od_nrf_pump_events();
+        od_nrf_pump_events();   /* no-op on target (the interrupt delivers); the host sim pumps */
         od_nrf_delay_ms(1u);
         waited++;
     }

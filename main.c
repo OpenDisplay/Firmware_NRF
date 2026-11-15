@@ -120,7 +120,10 @@ static float read_chip_temperature(void) {
 }
 
 /* ---- platform hooks for the shared chain (od_nrf_glue.h) ---- */
-void od_nrf_pump_events(void) { nrf_sdh_evts_poll(); }
+/* SoftDevice events are dispatched by their own interrupt (NRF_SDH_DISPATCH_MODEL 0), which
+ * preempts every caller of this hook (main() only). Polling here as well would dispatch BLE events
+ * re-entrantly, so this is deliberately empty; the host tests deliver simulated FDS events here. */
+void od_nrf_pump_events(void) {}
 
 void od_nrf_wdt_feed_now(void) { nrf_drv_wdt_channel_feed(m_wdt_channel_id); }
 

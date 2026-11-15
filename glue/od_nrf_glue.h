@@ -17,7 +17,7 @@
 #endif
 
 /* ---- platform hooks the glue needs from main.c ------------------------------------------- */
-void od_nrf_pump_events(void);          /* nrf_sdh_evts_poll() */
+void od_nrf_pump_events(void);          /* empty on target; the host FDS sim pumps here */
 void od_nrf_wdt_feed_now(void);         /* unconditional watchdog feed */
 void od_nrf_delay_ms(uint32_t ms);      /* busy delay that keeps the watchdog fed */
 uint32_t od_nrf_now_ms(void);           /* monotonic milliseconds from RTC1 */

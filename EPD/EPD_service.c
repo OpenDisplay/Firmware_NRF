@@ -1,9 +1,14 @@
 /* EPD_service.c -- the OpenDisplay GATT service and the 3.0 command set.
  *
  * Every write to the characteristic is one frame [cmd_hi][cmd_lo][body]. Frames are handled in
- * the BLE event handler, as before, except the refresh after DIRECT_WRITE_END, which runs from
- * main() (ble_epd_service_run): a refresh takes seconds, and while it runs this handler keeps
- * answering, refusing what would disturb the panel (START: PANEL_BUSY, config writes: BUSY). */
+ * the BLE event handler (the SoftDevice's event interrupt), except three kinds of work that run
+ * from main() (ble_epd_service_run):
+ *   - the refresh after DIRECT_WRITE_END: it takes seconds, and while it runs this handler keeps
+ *     answering, refusing what would disturb the panel (START: PANEL_BUSY, config writes: BUSY);
+ *   - config saves and clears (F4): the flash write waits for the FDS completion, which is
+ *     delivered by the same interrupt, so it cannot wait inside the handler;
+ *   - DEEP_SLEEP, REBOOT and ENTER_DFU (F2): taken after a running refresh ends, with the panel
+ *     powered down and SPI_RAW closed first. */
 #include "EPD_service.h"
 #include "od_nrf_build_id.h"
 
@@ -95,6 +100,16 @@ bool ble_epd_refresh_busy(void)
     return s_x.refresh_pending || s_x.refreshing;
 }
 
+/* Work handed from the event handler to main(). */
+enum power_action { POWER_NONE, POWER_SLEEP, POWER_REBOOT, POWER_DFU };
+
+static struct {
+    volatile bool save;          /* a config save or clear is waiting for main() */
+    uint8_t op;                  /* RESP_CONFIG_WRITE / _CHUNK / _CLEAR: the opcode to answer */
+    uint32_t len;                /* record length in g_od_cfg_ws.buffer */
+    volatile uint8_t power;      /* enum power_action */
+} s_pend;
+
 static void xfer_abort(void)
 {
     if (s_x.active) {
@@ -116,7 +131,7 @@ static void handle_direct_write_start(const uint8_t *body, uint16_t len)
     od_color_geometry_t g;
     od_display_rc_t rc;
 
-    if (ble_epd_refresh_busy()) {
+    if (ble_epd_refresh_busy() || s_pend.save || s_pend.power != POWER_NONE) {
         reply4(RESP_NACK, RESP_DIRECT_WRITE_START_ACK, OD_ERR_PANEL_BUSY);
         return;
     }
@@ -217,7 +232,8 @@ static bool config_read_active(void);
  * a CONFIG_READ is streaming (the read pump reads flash in place, chunk by chunk). */
 static bool config_busy(void)
 {
-    return ble_epd_refresh_busy() || s_x.active || od_display_active() || config_read_active();
+    return ble_epd_refresh_busy() || s_x.active || od_display_active() || config_read_active() ||
+           s_pend.save;
 }
 
 static void config_reload(void)
@@ -239,21 +255,45 @@ static void config_reload(void)
     updatemsdata();
 }
 
+/* Checked in the handler; the flash write itself runs from main() (config_save_run). */
 static void config_store(uint8_t op, uint32_t len)
 {
     uint8_t err = OD_ERR_CONFIG_WRITE_FAILED;
 
-    if (od_nrf_config_check(g_od_cfg_ws.buffer, len, &err)) {
-        const enum od_config_store_result r =
-            od_config_store_save(&g_od_cfg_ws, sizeof g_od_cfg_ws, g_od_cfg_ws.buffer, len);
-        if (r == OD_CONFIG_STORE_OK) {
-            reply4(RESP_ACK, op, 0x00u);
-            config_reload();
-            return;
-        }
-        err = (r == OD_CONFIG_STORE_BUSY) ? OD_ERR_CONFIG_WRITE_BUSY : OD_ERR_CONFIG_WRITE_FAILED;
+    if (!od_nrf_config_check(g_od_cfg_ws.buffer, len, &err)) {
+        reply4(RESP_NACK, op, err);
+        return;
     }
-    reply4(RESP_NACK, op, err);
+    s_pend.op = op;
+    s_pend.len = len;
+    s_pend.save = true;
+}
+
+static void config_save_run(void)
+{
+    const uint8_t op = s_pend.op;
+    uint8_t status = RESP_NACK;
+    uint8_t err = 0x00u;
+
+    if (op == RESP_CONFIG_CLEAR) {
+        if (od_config_store_clear() == OD_CONFIG_STORE_OK) {
+            status = RESP_ACK;
+            config_reload();
+        }
+    } else {
+        const enum od_config_store_result r =
+            od_config_store_save(&g_od_cfg_ws, sizeof g_od_cfg_ws, g_od_cfg_ws.buffer, s_pend.len);
+        if (r == OD_CONFIG_STORE_OK) {
+            status = RESP_ACK;
+            config_reload();
+        } else {
+            err = (r == OD_CONFIG_STORE_BUSY) ? OD_ERR_CONFIG_WRITE_BUSY : OD_ERR_CONFIG_WRITE_FAILED;
+        }
+    }
+    /* The record and globalConfig are consistent before the host hears the answer, and config
+     * writes stay refused (config_busy) until then. */
+    reply4(status, op, err);
+    s_pend.save = false;
 }
 
 static void handle_config_write(const uint8_t *body, uint16_t len)
@@ -304,12 +344,9 @@ static void handle_config_clear(void)
         return;
     }
     od_config_asm_reset(&g_od_cfg_ws);
-    if (od_config_store_clear() != OD_CONFIG_STORE_OK) {
-        reply4(RESP_NACK, RESP_CONFIG_CLEAR, 0x00u);
-        return;
-    }
-    reply4(RESP_ACK, RESP_CONFIG_CLEAR, 0x00u);
-    config_reload();
+    s_pend.op = RESP_CONFIG_CLEAR;
+    s_pend.len = 0u;
+    s_pend.save = true;
 }
 
 /* CONFIG_READ streams the record from flash: [00][40][chunk LE] (+[len LE] on chunk 0) + data,
@@ -519,23 +556,20 @@ static void dispatch_command(uint16_t cmd, const uint8_t *body, uint16_t len)
         break;
     }
     case CMD_REBOOT:
-        nrf_delay_ms(100);
-        system_reset();
+        s_pend.power = POWER_REBOOT;
         break;
     case CMD_ENTER_DFU:
         reply2(RESP_ACK, RESP_ENTER_DFU);
-        nrf_delay_ms(100);
-        enter_dfu_mode();
+        s_pend.power = POWER_DFU;
         break;
     case CMD_POWER_OFF:
         /* No power latch on this hardware. */
         reply4(RESP_NACK, RESP_POWER_OFF, OD_ERR_POWER_OFF_UNSUPPORTED);
         break;
     case CMD_DEEP_SLEEP:
-        /* System OFF: wakes on reset or a configured button only (no timer wake). */
+        /* System OFF: wakes on reset, a configured button or the NFC field (no timer wake). */
         reply2(RESP_ACK, RESP_DEEP_SLEEP);
-        nrf_delay_ms(100);
-        enter_deep_sleep();
+        s_pend.power = POWER_SLEEP;
         break;
     default:
         break;   /* unknown opcode: silence, as the reference firmware */
@@ -617,12 +651,37 @@ void ble_epd_on_ble_evt(ble_epd_t *p_epd, ble_evt_t *e)
     }
 }
 
+/* Saves and power actions; a power action waits for a pending refresh and a pending save. */
+void ble_epd_service_deferred(void)
+{
+    uint8_t action;
+
+    if (s_pend.save) {
+        config_save_run();
+    }
+    action = s_pend.power;
+    if (action == POWER_NONE || ble_epd_refresh_busy() || s_pend.save) {
+        return;
+    }
+    s_pend.power = POWER_NONE;
+    nrf_delay_ms(100);          /* let the ACK notification go out */
+    od_drive_app_abort();       /* panel power off, SPI_RAW closed, transfer dropped */
+    s_x.active = false;
+    switch (action) {
+    case POWER_SLEEP:  enter_deep_sleep(); break;
+    case POWER_REBOOT: system_reset(); break;
+    case POWER_DFU:    enter_dfu_mode(); break;
+    default:           break;
+    }
+}
+
 void ble_epd_service_run(ble_epd_t *p_epd)
 {
     (void)p_epd;
     if (s_x.refresh_pending) {
         run_refresh();
     }
+    ble_epd_service_deferred();
 }
 
 static uint32_t epd_service_init(ble_epd_t *p_epd)
@@ -667,6 +726,7 @@ void ble_epd_sleep_prepare(ble_epd_t *p_epd)
 {
     (void)p_epd;
     xfer_abort();
+    od_drive_app_abort();   /* also after a refresh or with SPI_RAW open (F2) */
 }
 
 uint32_t ble_epd_init(ble_epd_t *p_epd)
@@ -675,6 +735,7 @@ uint32_t ble_epd_init(ble_epd_t *p_epd)
         return NRF_ERROR_NULL;
     }
     s_epd = p_epd;
+    memset(&s_pend, 0, sizeof s_pend);
     p_epd->max_data_len = BLE_EPD_MAX_DATA_LEN;
     p_epd->conn_handle = BLE_CONN_HANDLE_INVALID;
     p_epd->is_notification_enabled = false;
