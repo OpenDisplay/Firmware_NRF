@@ -18,7 +18,7 @@ import json, sys
 d = json.load(open(sys.argv[1]))["panels"][sys.argv[2]]
 b = bytes.fromhex(d["framed_hex"])
 planes = d["modes"][0]["planes"]
-bpp = 2 if d["color_scheme"] == 3 else 1
+bpp = {3: 2, 4: 4, 5: 2, 6: 4, 10: 2}.get(d["color_scheme"], 1)   # 1 bpp per plane otherwise
 frame = (d["width"] * bpp + 7) // 8 * d["height"] * planes
 idle = next(bytes.fromhex(p["body_hex"])[2] for p in d["packets"] if p["id"] == 0xB1)
 with open(sys.argv[3], "w") as f:
