@@ -22,6 +22,8 @@
 #include "fds_sim.h"
 #include "main.h"
 #include "od_advert.h"
+#include "od_drive_app.h"
+#include "od_epd_cfg.h"
 #include "od_config_store.h"
 #include "od_nrf_glue.h"
 #include "opendisplay_protocol.h"
@@ -89,7 +91,9 @@ void EPD_WriteData(uint8_t *p, uint8_t n)
     for (unsigned i = 0; i < n; i++) fprintf(g_bus, "%02x", p[i]);
     fputc('\n', g_bus);
 }
-void host_gpio_write(uint32_t pin, uint32_t level) { (void)pin; (void)level; }
+static uint8_t g_pin_level[32], g_pin_mode[32];
+void host_gpio_write(uint32_t pin, uint32_t level) { if (pin < 32u) g_pin_level[pin] = (uint8_t)level; }
+void host_gpio_cfg(uint32_t pin, uint32_t mode) { if (pin < 32u) g_pin_mode[pin] = (uint8_t)mode; }
 static uint32_t g_fd_level;   /* the NFC field-detect pin (test_nfc.inc) */
 uint32_t host_gpio_read(uint32_t pin) { return pin == 11u ? g_fd_level : g_busy_level; }
 
@@ -530,6 +534,18 @@ static void test_spi_raw(void)
     CHECK(LAST(0x00, 0x84, SPI_RAW_SUB_CLOSE));
 }
 
+/* F5: SET_PIN level 0 drives low, 1 drives high, 2 releases the pin (Hi-Z), >31 is unwired. */
+static void test_set_pin_levels(void)
+{
+    const od_epd_cfg_bus_t *bus = od_drive_app_bus();
+
+    CHECK(bus->pin_write(13u, 1u) && g_pin_mode[13] == 1u && g_pin_level[13] == 1u);
+    CHECK(bus->pin_write(13u, 0u) && g_pin_mode[13] == 1u && g_pin_level[13] == 0u);
+    g_pin_level[13] = 7u;
+    CHECK(bus->pin_write(13u, 2u) && g_pin_mode[13] == 2u && g_pin_level[13] == 7u);
+    CHECK(!bus->pin_write(40u, 1u));
+}
+
 static void test_bootguard(void)
 {
     uint8_t v = 0x00;
@@ -662,6 +678,7 @@ int main(void)
     test_boot_screen();
     test_config_rules();
     test_spi_raw();
+    test_set_pin_levels();
     test_bootguard();
     test_power_cuts();
     test_nfc();

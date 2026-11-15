@@ -70,10 +70,18 @@ static int bus_busy_read(void)
     return (int)nrf_gpio_pin_read(s_disp->busy_pin);
 }
 
+/* SET_PIN levels: 0 low, 1 high, 2 released (Hi-Z: input, no pull). */
 static bool bus_pin_write(uint8_t pin, uint8_t level)
 {
+    if (pin > 31u) {
+        return false;   /* one GPIO port on this part */
+    }
+    if (level >= 2u) {
+        nrf_gpio_cfg_input(pin, NRF_GPIO_PIN_NOPULL);
+        return true;
+    }
+    nrf_gpio_pin_write(pin, level);
     nrf_gpio_cfg_output(pin);
-    nrf_gpio_pin_write(pin, level ? 1u : 0u);
     return true;
 }
 
