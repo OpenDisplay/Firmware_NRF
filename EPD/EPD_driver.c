@@ -37,6 +37,9 @@ nrf_gpio_pin_dir_t nrf_gpio_pin_dir_get(uint32_t pin) {
 #endif
 
 void pinMode(uint32_t pin, uint32_t mode) {
+    if (pin > 31u) {
+        return;   /* 0xFF = not wired; the nRF52811 has one port (P0.00-P0.31) */
+    }
     switch (mode) {
         case INPUT:
             nrf_gpio_cfg_input(pin, NRF_GPIO_PIN_NOPULL);
@@ -111,6 +114,8 @@ void EPD_GPIO_Uninit(void) {
     digitalWrite(EPD_DC_PIN, LOW);
     digitalWrite(EPD_CS_PIN, LOW);
     digitalWrite(EPD_RST_PIN, LOW);
+    /* The panel supply enable stays an output, driven off: left floating, the switch's gate would
+     * depend on the board's pull resistor, also in System OFF (GPIO keeps its configuration). */
     if (EPD_EN_PIN != 0xFF) digitalWrite(EPD_EN_PIN, LOW);
 
     pinMode(EPD_MOSI_PIN, DEFAULT);
@@ -119,7 +124,6 @@ void EPD_GPIO_Uninit(void) {
     pinMode(EPD_DC_PIN, DEFAULT);
     pinMode(EPD_RST_PIN, DEFAULT);
     pinMode(EPD_BUSY_PIN, DEFAULT);
-    pinMode(EPD_EN_PIN, DEFAULT);
 }
 
 // SPI
