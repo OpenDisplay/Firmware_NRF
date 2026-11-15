@@ -139,7 +139,10 @@ void button_init(void) {
             bool initialPressed = btn->inverted ? !initialPinState : initialPinState;
             btn->current_state = initialPressed ? 1 : 0;
             
-            nrf_drv_gpiote_in_config_t in_config = GPIOTE_CONFIG_IN_SENSE_TOGGLE(true);
+            /* PORT event (SENSE), not an IN channel: an IN channel keeps the GPIOTE clocked and
+             * costs idle current for as long as the tag is awake. The handler reads the pin, so
+             * the lower edge accuracy does not matter. */
+            nrf_drv_gpiote_in_config_t in_config = GPIOTE_CONFIG_IN_SENSE_TOGGLE(false);
             if (hasPullup) {
                 in_config.pull = NRF_GPIO_PIN_PULLUP;
             } else if (hasPulldown) {
@@ -248,7 +251,7 @@ void button_sleep_arm(void) {
         if (!btn->initialized) {
             continue;
         }
-        /* The GPIOTE IN channel does not run in System OFF; the pin's SENSE does. */
+        /* The GPIOTE driver does not run in System OFF; the pin's own SENSE does. */
         nrf_drv_gpiote_in_uninit(btn->pin);
         btn->initialized = false;
         nrf_gpio_cfg_sense_input(btn->pin, (nrf_gpio_pin_pull_t)btn->pull,
