@@ -41,14 +41,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The archive is slow and has dropped a download mid-transfer: cache the three package
+      # files (keyed on their SHA-256) and retry downloads.
+      - name: Cache the pinned toolchain packages
+        uses: actions/cache@v4
+        with:
+          path: toolchain-pkgs
+          key: arm-none-eabi-gcc16.2.0-1-b3fca231-newlib52a414b0-binutilsb494d4e0
+
       - name: Install the pinned ARM toolchain (GCC 16.2.0, newlib 4.6.0, binutils 2.47)
         run: |
           pacman -Sy --noconfirm --needed make which libmpc libisl zstd zlib
-          cd "$RUNNER_TEMP"
+          mkdir -p toolchain-pkgs
+          cd toolchain-pkgs
           for p in arm-none-eabi-binutils/arm-none-eabi-binutils-2.47-1-x86_64 \
                    arm-none-eabi-gcc/arm-none-eabi-gcc-16.2.0-1-x86_64 \
                    arm-none-eabi-newlib/arm-none-eabi-newlib-4.6.0.20260123-1-any; do
-            curl -sSfLO "$ALA/$p.pkg.tar.zst"
+            [ -s "$(basename "$p").pkg.tar.zst" ] && continue
+            curl -sSfLO --retry 5 --retry-all-errors --retry-delay 10 --max-time 900 "$ALA/$p.pkg.tar.zst"
           done
           sha256sum -c - <<'EOF'
           b494d4e01cc35c4bcef8522c28d32a9b086460f1037eaaa7a046f2c378d0d7d1  arm-none-eabi-binutils-2.47-1-x86_64.pkg.tar.zst
