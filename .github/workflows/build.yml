@@ -125,7 +125,9 @@ jobs:
       - name: Install nRF Command Line Tools (mergehex) and clang
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang
+          # gcc-arm-none-eabi only satisfies the Makefile's toolchain check: the application is
+          # never recompiled here (make -o below, and its SHA-256 is checked after packaging).
+          sudo apt-get install -y --no-install-recommends clang gcc-arm-none-eabi binutils-arm-none-eabi
           sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb || sudo apt-get install -f -y
           sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb
 
@@ -140,9 +142,11 @@ jobs:
       - name: Softdevice image, full image and OTA zip
         working-directory: build-nrf52
         run: |
+          before=$(sha256sum _build/EPD-nRF52.hex)
           make -o _build/EPD-nRF52.hex -o _build/EPD-nRF52.out sd ${{ needs.compile.outputs.args }}
           make -o _build/EPD-nRF52.hex -o _build/EPD-nRF52.out full ${{ needs.compile.outputs.args }} \
             GENERATE_OTA=1 KEY_FILE=../tools/priv.pem
+          [ "$(sha256sum _build/EPD-nRF52.hex)" = "$before" ] || { echo "the application was rebuilt"; exit 1; }
 
       - name: Collect artefacts
         run: |
