@@ -25,12 +25,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The ARM compiler is pinned: the app fills its flash region to within a few hundred bytes,
+      # and Ubuntu's gcc-arm-none-eabi 13.2 overflows it by about 2 kB.
       - name: Install toolchains
+        env:
+          XPACK: 15.2.1-1.1
+          XPACK_SHA256: da6a49ad4003944b823c6c93702a8787c922ab34bd7e918ec0eaf6933a9b1ff6
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi \
-            libnewlib-arm-none-eabi clang
-          arm-none-eabi-gcc --version | head -1
+          sudo apt-get install -y --no-install-recommends clang
+          f=xpack-arm-none-eabi-gcc-$XPACK-linux-x64.tar.gz
+          curl -sSfL -o "$RUNNER_TEMP/$f" \
+            "https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v$XPACK/$f"
+          echo "$XPACK_SHA256  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xpack-arm-none-eabi-gcc-$XPACK/bin" >> "$GITHUB_PATH"
+          echo "GNU_INSTALL_ROOT=$RUNNER_TEMP/xpack-arm-none-eabi-gcc-$XPACK/bin" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/xpack-arm-none-eabi-gcc-$XPACK/bin/arm-none-eabi-gcc" --version | head -1
 
       - name: Cache nRF Command Line Tools
         id: cache-nrf
