@@ -1,0 +1,1456 @@
+{
+ "_comment": "i1Pro spot reads of stock swatch charts on 18 fleet displays, 2026-11-17. Per-unit values: unit-to-unit spread is large (two 2.9in BWR units differ by 4.2 dE00 in red), so a type default taken from here must name its unit. `code` is the palette code in that unit's swatch manifest (source.charts), so it differs by colour scheme: red is 2 on BWR units and 3 on BWRY units. Match colours by `name`.",
+ "date": "2026-11-17",
+ "source": {
+  "csv": "i1pro/20261117_fleet/fleet_summary.csv (analyse_fleet.py)",
+  "raw": "i1pro/20261117_fleet/fleet.log (spectra 380-730 nm, 10 nm)",
+  "charts": "i1pro/swatch_fleet_20261117/<device>.json"
+ },
+ "conditions": {
+  "instrument": "X-Rite i1Pro S/N 324492, reflective, M0 (no UV filter), flat on the front",
+  "colour_space": "CIELAB, D50 / 2 degree observer",
+  "white_calibration": "tile at 17:10; tile drift 0.20 dE00 by 17:26",
+  "drive": "stock full refresh (OTP waveform), no custom LUT",
+  "read_delay_min": [
+   4,
+   33
+  ],
+  "reads_per_patch": 2,
+  "repeatability_de00": {
+   "median": 0.11,
+   "max": 0.63
+  },
+  "panel_temperature": "not readable on any unit; mcu_temp_c is the MCU die temperature",
+  "glazing": "measured as installed. The plastic front costs about 16-36 % of the light on every patch with hue unchanged, so bare and glazed values are not interchangeable",
+  "excluded_reads": [
+   "OD5BCEB3 black, 17:11:46, off-centre"
+  ]
+ },
+ "units": [
+  {
+   "device": "OD5BCEB3",
+   "panel": "7.5\" BWR 800x480 (sold as 7.4\")",
+   "panel_ic_type": null,
+   "controller": "UC8179",
+   "pixels": [
+    800,
+    480
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 25.0,
+   "refresh_end": "17:03:16",
+   "contrast": 25.65,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      8.339,
+      4.593,
+      -0.884
+     ],
+     "lab_rel_white": [
+      23.333,
+      7.542,
+      -1.274
+     ],
+     "Y": 0.924,
+     "reads": 4,
+     "rep_de00": 0.198,
+     "t_read": "17:11:28"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      55.778,
+      -0.211,
+      -0.277
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 23.692,
+     "reads": 2,
+     "rep_de00": 0.139,
+     "t_read": "17:11:37"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      23.786,
+      36.716,
+      21.352
+     ],
+     "lab_rel_white": [
+      48.298,
+      59.565,
+      34.678
+     ],
+     "Y": 4.035,
+     "reads": 2,
+     "rep_de00": 0.301,
+     "t_read": "17:11:43"
+    }
+   ]
+  },
+  {
+   "device": "ODBF064E",
+   "panel": "800x480 BWRY M3 Silabs Pro",
+   "panel_ic_type": "0x0040",
+   "controller": null,
+   "pixels": [
+    800,
+    480
+   ],
+   "firmware": "bg22-dev",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 23.5,
+   "refresh_end": "16:59:02",
+   "contrast": 25.495,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      7.6,
+      3.218,
+      -1.398
+     ],
+     "lab_rel_white": [
+      23.413,
+      6.749,
+      -2.53
+     ],
+     "Y": 0.841,
+     "reads": 2,
+     "rep_de00": 0.17,
+     "t_read": "17:12:27"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      53.44,
+      -2.242,
+      0.296
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 21.451,
+     "reads": 2,
+     "rep_de00": 0.116,
+     "t_read": "17:12:30"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      51.209,
+      12.712,
+      55.103
+     ],
+     "lab_rel_white": [
+      96.274,
+      25.048,
+      91.798
+     ],
+     "Y": 19.449,
+     "reads": 2,
+     "rep_de00": 0.634,
+     "t_read": "17:12:32"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      20.616,
+      33.726,
+      22.735
+     ],
+     "lab_rel_white": [
+      45.167,
+      58.755,
+      37.853
+     ],
+     "Y": 3.145,
+     "reads": 2,
+     "rep_de00": 0.147,
+     "t_read": "17:12:34"
+    }
+   ]
+  },
+  {
+   "device": "OD01AAA9",
+   "panel": "400x300 BWRY M3 Silabs Pro",
+   "panel_ic_type": "0x003A",
+   "controller": null,
+   "pixels": [
+    400,
+    300
+   ],
+   "firmware": "084d50bc1d16cb78c6f65464c187d28663393aba",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 23.0,
+   "refresh_end": "17:05:03",
+   "contrast": 31.947,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      7.097,
+      3.485,
+      -0.859
+     ],
+     "lab_rel_white": [
+      20.558,
+      6.546,
+      -2.059
+     ],
+     "Y": 0.786,
+     "reads": 2,
+     "rep_de00": 0.297,
+     "t_read": "17:13:40"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      57.174,
+      -1.49,
+      1.198
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 25.101,
+     "reads": 2,
+     "rep_de00": 0.256,
+     "t_read": "17:13:42"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      50.533,
+      11.632,
+      46.471
+     ],
+     "lab_rel_white": [
+      89.472,
+      20.686,
+      72.631
+     ],
+     "Y": 18.868,
+     "reads": 2,
+     "rep_de00": 0.119,
+     "t_read": "17:13:46"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      20.672,
+      32.106,
+      19.742
+     ],
+     "lab_rel_white": [
+      42.134,
+      52.327,
+      30.635
+     ],
+     "Y": 3.159,
+     "reads": 2,
+     "rep_de00": 0.155,
+     "t_read": "17:13:48"
+    }
+   ]
+  },
+  {
+   "device": "ODE7D010",
+   "panel": "4.2\" BWR 400x300",
+   "panel_ic_type": null,
+   "controller": "SSD1619",
+   "pixels": [
+    400,
+    300
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 21.5,
+   "refresh_end": "16:51:35",
+   "contrast": 26.213,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      9.005,
+      2.226,
+      -4.251
+     ],
+     "lab_rel_white": [
+      23.05,
+      3.209,
+      -7.084
+     ],
+     "Y": 1.002,
+     "reads": 2,
+     "rep_de00": 0.232,
+     "t_read": "17:14:21"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      58.279,
+      0.5,
+      0.766
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 26.255,
+     "reads": 2,
+     "rep_de00": 0.031,
+     "t_read": "17:14:23"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      22.838,
+      31.543,
+      14.763
+     ],
+     "lab_rel_white": [
+      44.653,
+      48.776,
+      22.565
+     ],
+     "Y": 3.753,
+     "reads": 2,
+     "rep_de00": 0.371,
+     "t_read": "17:14:25"
+    }
+   ]
+  },
+  {
+   "device": "OD390B21",
+   "panel": "4.2\" BWY 400x300",
+   "panel_ic_type": null,
+   "controller": "SSD1619",
+   "pixels": [
+    400,
+    300
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 25.5,
+   "refresh_end": "16:52:50",
+   "contrast": 26.194,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      10.429,
+      0.278,
+      -0.472
+     ],
+     "lab_rel_white": [
+      23.059,
+      0.651,
+      -4.359
+     ],
+     "Y": 1.183,
+     "reads": 2,
+     "rep_de00": 0.146,
+     "t_read": "17:14:55"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      62.489,
+      -0.483,
+      6.912
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 30.978,
+     "reads": 2,
+     "rep_de00": 0.068,
+     "t_read": "17:14:58"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      47.946,
+      8.915,
+      53.998
+     ],
+     "lab_rel_white": [
+      78.507,
+      13.777,
+      75.33
+     ],
+     "Y": 16.752,
+     "reads": 2,
+     "rep_de00": 0.299,
+     "t_read": "17:15:00"
+    }
+   ]
+  },
+  {
+   "device": "OD98430A",
+   "panel": "4.3\" BWR 152x522",
+   "panel_ic_type": null,
+   "controller": "UC81xx variant (UCVAR43)",
+   "pixels": [
+    152,
+    522
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "exclude",
+   "mcu_temp_c": 24.0,
+   "refresh_end": "16:54:29",
+   "contrast": 3.819,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      30.505,
+      3.44,
+      -2.471
+     ],
+     "lab_rel_white": [
+      58.211,
+      5.336,
+      -4.166
+     ],
+     "Y": 6.444,
+     "reads": 2,
+     "rep_de00": 0.25,
+     "t_read": "17:15:31"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      56.693,
+      0.147,
+      0.211
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 24.609,
+     "reads": 2,
+     "rep_de00": 0.04,
+     "t_read": "17:15:34"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      35.918,
+      10.492,
+      -1.998
+     ],
+     "lab_rel_white": [
+      66.848,
+      16.567,
+      -3.435
+     ],
+     "Y": 8.965,
+     "reads": 2,
+     "rep_de00": 0.123,
+     "t_read": "17:15:36"
+    }
+   ],
+   "use_note": "chart rendered faded (contrast 3.8), confirmed on the glass: a drive or panel fault, not representative"
+  },
+  {
+   "device": "OD0DB292",
+   "panel": "2.9\" BWR 168x384",
+   "panel_ic_type": null,
+   "controller": "SSD1619",
+   "pixels": [
+    168,
+    384
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 24.5,
+   "refresh_end": "16:50:13",
+   "contrast": 33.107,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      8.045,
+      1.826,
+      -1.488
+     ],
+     "lab_rel_white": [
+      20.126,
+      2.9,
+      -2.257
+     ],
+     "Y": 0.891,
+     "reads": 2,
+     "rep_de00": 0.154,
+     "t_read": "17:16:52"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      61.21,
+      -0.329,
+      0.043
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 29.488,
+     "reads": 2,
+     "rep_de00": 0.233,
+     "t_read": "17:16:55"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      25.334,
+      40.881,
+      28.074
+     ],
+     "lab_rel_white": [
+      46.1,
+      61.746,
+      42.157
+     ],
+     "Y": 4.524,
+     "reads": 2,
+     "rep_de00": 0.028,
+     "t_read": "17:16:57"
+    }
+   ]
+  },
+  {
+   "device": "OD0F71E4",
+   "panel": "2.9\" BWR 168x384",
+   "panel_ic_type": null,
+   "controller": "UC8151",
+   "pixels": [
+    168,
+    384
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 21.0,
+   "refresh_end": "16:55:17",
+   "contrast": 25.319,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      10.293,
+      4.297,
+      -1.57
+     ],
+     "lab_rel_white": [
+      23.504,
+      6.149,
+      -2.692
+     ],
+     "Y": 1.164,
+     "reads": 2,
+     "rep_de00": 0.099,
+     "t_read": "17:18:05"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      61.206,
+      0.58,
+      0.626
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 29.483,
+     "reads": 2,
+     "rep_de00": 0.036,
+     "t_read": "17:18:07"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      22.815,
+      34.831,
+      20.223
+     ],
+     "lab_rel_white": [
+      42.319,
+      51.805,
+      30.053
+     ],
+     "Y": 3.747,
+     "reads": 2,
+     "rep_de00": 0.225,
+     "t_read": "17:18:09"
+    }
+   ]
+  },
+  {
+   "device": "OD507E22",
+   "panel": "184x384 BWRY M3 Silabs Core",
+   "panel_ic_type": "0x0036",
+   "controller": null,
+   "pixels": [
+    184,
+    384
+   ],
+   "firmware": "bg22-dev",
+   "glazing": "bare",
+   "use": "ok",
+   "mcu_temp_c": 25.0,
+   "refresh_end": "17:06:04",
+   "contrast": 29.101,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      10.218,
+      2.626,
+      -2.452
+     ],
+     "lab_rel_white": [
+      21.713,
+      4.685,
+      -3.482
+     ],
+     "Y": 1.155,
+     "reads": 2,
+     "rep_de00": 0.049,
+     "t_read": "17:18:51"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      64.645,
+      -1.887,
+      -0.092
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 33.602,
+     "reads": 2,
+     "rep_de00": 0.024,
+     "t_read": "17:18:53"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      57.079,
+      16.053,
+      62.57
+     ],
+     "lab_rel_white": [
+      89.117,
+      25.69,
+      90.061
+     ],
+     "Y": 25.004,
+     "reads": 2,
+     "rep_de00": 0.022,
+     "t_read": "17:18:56"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      23.487,
+      36.525,
+      23.905
+     ],
+     "lab_rel_white": [
+      40.798,
+      54.16,
+      34.427
+     ],
+     "Y": 3.944,
+     "reads": 2,
+     "rep_de00": 0.038,
+     "t_read": "17:18:58"
+    }
+   ]
+  },
+  {
+   "device": "ODF4DA34",
+   "panel": "168x384 BWRY M3 Silabs Pro",
+   "panel_ic_type": "0x001E",
+   "controller": "JD79661 (panels.yaml 0x001E)",
+   "pixels": [
+    168,
+    384
+   ],
+   "firmware": "084d50bc1d16cb78c6f65464c187d28663393aba",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 23.5,
+   "refresh_end": "16:47:15",
+   "contrast": 27.52,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      7.779,
+      3.81,
+      -0.868
+     ],
+     "lab_rel_white": [
+      22.422,
+      6.925,
+      -1.649
+     ],
+     "Y": 0.861,
+     "reads": 2,
+     "rep_de00": 0.044,
+     "t_read": "17:19:39"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      55.785,
+      -1.352,
+      0.438
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 23.699,
+     "reads": 2,
+     "rep_de00": 0.093,
+     "t_read": "17:19:41"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      51.793,
+      15.526,
+      62.293
+     ],
+     "lab_rel_white": [
+      93.549,
+      27.272,
+      100.349
+     ],
+     "Y": 19.961,
+     "reads": 2,
+     "rep_de00": 0.122,
+     "t_read": "17:19:44"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      21.254,
+      35.343,
+      24.911
+     ],
+     "lab_rel_white": [
+      44.199,
+      58.501,
+      40.21
+     ],
+     "Y": 3.312,
+     "reads": 2,
+     "rep_de00": 0.013,
+     "t_read": "17:19:46"
+    }
+   ]
+  },
+  {
+   "device": "OD6FACF2",
+   "panel": "184x360 BWRY M3 Silabs Pro",
+   "panel_ic_type": "0x001C",
+   "controller": null,
+   "pixels": [
+    184,
+    360
+   ],
+   "firmware": "bg22-dev",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 24.5,
+   "refresh_end": "17:06:35",
+   "contrast": 28.03,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      7.67,
+      3.346,
+      -1.096
+     ],
+     "lab_rel_white": [
+      22.187,
+      6.501,
+      -2.71
+     ],
+     "Y": 0.849,
+     "reads": 2,
+     "rep_de00": 0.105,
+     "t_read": "17:20:21"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      55.888,
+      -1.937,
+      1.678
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 23.801,
+     "reads": 2,
+     "rep_de00": 0.015,
+     "t_read": "17:20:23"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      50.39,
+      15.585,
+      56.982
+     ],
+     "lab_rel_white": [
+      91.129,
+      28.211,
+      90.673
+     ],
+     "Y": 18.747,
+     "reads": 2,
+     "rep_de00": 0.14,
+     "t_read": "17:20:25"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      21.114,
+      33.443,
+      23.05
+     ],
+     "lab_rel_white": [
+      43.888,
+      55.928,
+      36.294
+     ],
+     "Y": 3.275,
+     "reads": 2,
+     "rep_de00": 0.046,
+     "t_read": "17:20:27"
+    }
+   ]
+  },
+  {
+   "device": "OD5AAAD9",
+   "panel": "2.7\" BWR 200x300",
+   "panel_ic_type": null,
+   "controller": "UC8151",
+   "pixels": [
+    200,
+    300
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 26.0,
+   "refresh_end": "16:56:01",
+   "contrast": 30.593,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      8.086,
+      2.037,
+      -1.965
+     ],
+     "lab_rel_white": [
+      21.09,
+      3.155,
+      -3.45
+     ],
+     "Y": 0.895,
+     "reads": 2,
+     "rep_de00": 0.236,
+     "t_read": "17:21:01"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      59.331,
+      -0.038,
+      0.819
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 27.387,
+     "reads": 2,
+     "rep_de00": 0.027,
+     "t_read": "17:21:04"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      21.163,
+      32.685,
+      19.758
+     ],
+     "lab_rel_white": [
+      41.226,
+      50.366,
+      29.992
+     ],
+     "Y": 3.288,
+     "reads": 2,
+     "rep_de00": 0.108,
+     "t_read": "17:21:07"
+    }
+   ]
+  },
+  {
+   "device": "OD18F3CD",
+   "panel": "2.2\" BWR 160x296 (EL022H3WRA)",
+   "panel_ic_type": null,
+   "controller": "SSD16xx command set",
+   "pixels": [
+    160,
+    296
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 24.5,
+   "refresh_end": "17:04:11",
+   "contrast": 22.358,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      10.294,
+      2.611,
+      -1.775
+     ],
+     "lab_rel_white": [
+      25.176,
+      3.601,
+      -2.811
+     ],
+     "Y": 1.165,
+     "reads": 2,
+     "rep_de00": 0.055,
+     "t_read": "17:21:39"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      58.074,
+      0.859,
+      0.054
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 26.039,
+     "reads": 2,
+     "rep_de00": 0.054,
+     "t_read": "17:21:42"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      23.952,
+      35.35,
+      20.827
+     ],
+     "lab_rel_white": [
+      46.565,
+      54.486,
+      32.584
+     ],
+     "Y": 4.086,
+     "reads": 2,
+     "rep_de00": 0.122,
+     "t_read": "17:21:44"
+    }
+   ]
+  },
+  {
+   "device": "OD545743",
+   "panel": "2.2\" Lite BWR 128x250",
+   "panel_ic_type": null,
+   "controller": "SSD1619",
+   "pixels": [
+    128,
+    250
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "caution",
+   "mcu_temp_c": 23.0,
+   "refresh_end": "16:59:39",
+   "contrast": 14.307,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      11.333,
+      1.853,
+      -7.445
+     ],
+     "lab_rel_white": [
+      31.783,
+      2.863,
+      -12.636
+     ],
+     "Y": 1.308,
+     "reads": 2,
+     "rep_de00": 0.114,
+     "t_read": "17:22:06"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      50.356,
+      0.515,
+      -0.456
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 18.718,
+     "reads": 2,
+     "rep_de00": 0.042,
+     "t_read": "17:22:09"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      23.008,
+      25.884,
+      7.74
+     ],
+     "lab_rel_white": [
+      52.192,
+      44.639,
+      13.944
+     ],
+     "Y": 3.803,
+     "reads": 2,
+     "rep_de00": 0.361,
+     "t_read": "17:22:11"
+    }
+   ],
+   "use_note": "consistent but weak: white about L* 50, contrast 14"
+  },
+  {
+   "device": "OD05B911",
+   "panel": "200x152 BWRY Telink TLSR825x tag (2.0\" BWRY)",
+   "panel_ic_type": "0xF001",
+   "controller": "JD79661 (panels.yaml 0xF001 EP20YR_200x152, status provisional)",
+   "pixels": [
+    200,
+    152
+   ],
+   "firmware": "rv3b81ebd",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": null,
+   "refresh_end": "17:09:13",
+   "contrast": 25.023,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      9.272,
+      3.479,
+      -1.122
+     ],
+     "lab_rel_white": [
+      23.659,
+      6.203,
+      -4.11
+     ],
+     "Y": 1.034,
+     "reads": 2,
+     "rep_de00": 0.066,
+     "t_read": "17:22:38"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      57.919,
+      -1.339,
+      4.129
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 25.876,
+     "reads": 2,
+     "rep_de00": 0.037,
+     "t_read": "17:22:42"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      51.14,
+      11.81,
+      57.449
+     ],
+     "lab_rel_white": [
+      89.362,
+      20.528,
+      87.089
+     ],
+     "Y": 19.39,
+     "reads": 2,
+     "rep_de00": 0.178,
+     "t_read": "17:22:45"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      22.871,
+      37.413,
+      25.979
+     ],
+     "lab_rel_white": [
+      45.0,
+      60.068,
+      38.616
+     ],
+     "Y": 3.763,
+     "reads": 2,
+     "rep_de00": 0.044,
+     "t_read": "17:22:48"
+    }
+   ]
+  },
+  {
+   "device": "OD0295D8",
+   "panel": "1.6\" BWR 200x200",
+   "panel_ic_type": null,
+   "controller": "SSD1619",
+   "pixels": [
+    200,
+    200
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "plastic front",
+   "use": "caution",
+   "mcu_temp_c": 23.0,
+   "refresh_end": "17:00:18",
+   "contrast": 11.787,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      13.098,
+      1.896,
+      -6.883
+     ],
+     "lab_rel_white": [
+      34.971,
+      3.36,
+      -11.679
+     ],
+     "Y": 1.578,
+     "reads": 2,
+     "rep_de00": 0.13,
+     "t_read": "17:23:19"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      50.222,
+      -0.05,
+      -0.433
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 18.605,
+     "reads": 2,
+     "rep_de00": 0.009,
+     "t_read": "17:23:22"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      19.484,
+      23.034,
+      5.209
+     ],
+     "lab_rel_white": [
+      46.157,
+      40.402,
+      9.495
+     ],
+     "Y": 2.862,
+     "reads": 2,
+     "rep_de00": 0.228,
+     "t_read": "17:23:26"
+    }
+   ],
+   "use_note": "consistent but weak: white about L* 50, contrast 12"
+  },
+  {
+   "device": "OD1F9C0E",
+   "panel": "200x200 BWRY M3 Silabs Pro",
+   "panel_ic_type": "0x0038",
+   "controller": null,
+   "pixels": [
+    200,
+    200
+   ],
+   "firmware": "bg22-dev",
+   "glazing": "plastic front",
+   "use": "ok",
+   "mcu_temp_c": 24.5,
+   "refresh_end": "17:05:32",
+   "contrast": 26.635,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      8.274,
+      3.794,
+      -0.455
+     ],
+     "lab_rel_white": [
+      22.843,
+      6.852,
+      -1.797
+     ],
+     "Y": 0.916,
+     "reads": 2,
+     "rep_de00": 0.105,
+     "t_read": "17:23:55"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      56.493,
+      -1.399,
+      1.942
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 24.407,
+     "reads": 2,
+     "rep_de00": 0.03,
+     "t_read": "17:23:58"
+    },
+    {
+     "name": "yellow",
+     "code": 2,
+     "lab": [
+      48.98,
+      15.536,
+      58.302
+     ],
+     "lab_rel_white": [
+      87.979,
+      26.989,
+      91.935
+     ],
+     "Y": 17.578,
+     "reads": 2,
+     "rep_de00": 0.164,
+     "t_read": "17:24:00"
+    },
+    {
+     "name": "red",
+     "code": 3,
+     "lab": [
+      21.193,
+      34.2,
+      23.228
+     ],
+     "lab_rel_white": [
+      43.514,
+      56.125,
+      36.146
+     ],
+     "Y": 3.296,
+     "reads": 2,
+     "rep_de00": 0.077,
+     "t_read": "17:24:04"
+    }
+   ]
+  },
+  {
+   "device": "OD182A7A",
+   "panel": "1.3\" BWR 144x200",
+   "panel_ic_type": null,
+   "controller": "SSD1619",
+   "pixels": [
+    144,
+    200
+   ],
+   "firmware": "3.0.0 eaa2772",
+   "glazing": "bare",
+   "use": "ok",
+   "mcu_temp_c": 24.0,
+   "refresh_end": "17:00:50",
+   "contrast": 22.437,
+   "entries": [
+    {
+     "name": "black",
+     "code": 0,
+     "lab": [
+      13.118,
+      0.998,
+      -4.03
+     ],
+     "lab_rel_white": [
+      25.128,
+      1.358,
+      -5.539
+     ],
+     "Y": 1.582,
+     "reads": 2,
+     "rep_de00": 0.06,
+     "t_read": "17:24:31"
+    },
+    {
+     "name": "white",
+     "code": 1,
+     "lab": [
+      66.128,
+      0.101,
+      -0.283
+     ],
+     "lab_rel_white": [
+      100.0,
+      0.0,
+      0.0
+     ],
+     "Y": 35.49,
+     "reads": 2,
+     "rep_de00": 0.024,
+     "t_read": "17:24:35"
+    },
+    {
+     "name": "red",
+     "code": 2,
+     "lab": [
+      26.892,
+      33.359,
+      15.59
+     ],
+     "lab_rel_white": [
+      44.582,
+      47.029,
+      22.184
+     ],
+     "Y": 5.056,
+     "reads": 2,
+     "rep_de00": 0.255,
+     "t_read": "17:24:38"
+    }
+   ]
+  }
+ ]
+}

@@ -107,6 +107,17 @@ def panel_body(idle: int, sleep: bytes) -> bytes:
     return (struct.pack("<BBBHH", 0, 0x01, idle, BUSY_TIMEOUT, 0) + bytes([0, 1, 2, 3])
             + bytes([1, len(sleep)]) + sleep)
 
+
+def cal_body(mode_index: int, entries: list[tuple[int, tuple[float, float, float]]]) -> bytes:
+    """0xB0 display_calibration (structs 1.6, the Firmware_Unified pdlib layout): head
+    [instance, mode, cal_flags, count] + per entry [codes LE16][L a b x100, int16]. cal_flags
+    bit0 (measured on THIS unit) stays 0: a preset palette is a type default from another unit,
+    and the host keeps a packet with bit0 set across preset updates. The device skips 0xB0."""
+    out = bytearray([0, mode_index, 0, len(entries)])
+    for code, (L, a, b) in entries:
+        out += struct.pack("<Hhhh", code, round(L * 100), round(a * 100), round(b * 100))
+    return bytes(out)
+
 # ---------------------------------------------------------------------------- tokens
 
 
@@ -365,7 +376,7 @@ def build_entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
             e["verified"] = GLASS[key]
         return e
     alt = _entry(key, name, w, h, scheme, idle, mode_steps, sleep_steps, list(notes),
-                 list(blocked), legacy, source, verified)
+                 list(blocked), legacy, source, verified, palette=False)
     steps, done = deviate(key, mode_steps)
     e = _entry(key, name, w, h, scheme, idle, steps, sleep_steps, list(notes), list(blocked),
                legacy, source, verified)
@@ -390,7 +401,8 @@ def build_entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
 
 def _entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
            mode_steps: list[tuple], sleep_steps: list[tuple], notes: list[str],
-           blocked: list[str], legacy: dict, source: str, verified: str) -> dict:
+           blocked: list[str], legacy: dict, source: str, verified: str,
+           palette: bool = True) -> dict:
     seq = encode_steps(mode_steps)
     sleep = encode_steps(sleep_steps)
     if len(sleep) > SLEEP_MAX:
@@ -401,6 +413,11 @@ def _entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
     if nimg != PLANES[scheme]:
         blocked.append("PLANE_COUNT")
     pkts = [(0xB1, 0, panel_body(idle, sleep)), (0xAE, 0, mode_body(0, "full", seq, scheme))]
+    # The palette was measured through the shipped packets, so an alternative gets none.
+    pal = palette_packet(key, scheme) if palette and not blocked else None
+    if pal:
+        pkts.append((0xB0, 0xB0, pal[0]))
+        notes = notes + [pal[1]]
     framed = b"".join(frame(n, i, b) for i, n, b in pkts)
     eq = check(framed, w, h, mode_steps, sleep_steps) if not blocked else None
     if blocked:
@@ -438,6 +455,42 @@ def _entry(key: int, name: str, w: int, h: int, scheme: int, idle: int,
     }
     e["fits_target"] = {"nrf52811": not blocked and len(framed) + 600 <= CONFIG_CAP}
     return e
+
+
+# Stock-refresh colours measured with an i1Pro (presets/palettes/i1pro_fleet_20261117.json,
+# copied from Firmware_Unified panels/palettes): key -> the unit whose reads become the preset's
+# 0xB0 for mode 0. Each is a type default taken from that one unit (unit-to-unit spread is large).
+# 0xE01B is left out: its unit (OD98430A) drew the chart faded (contrast 3.8, confirmed on the
+# glass), a drive or panel fault, so its reads do not describe the type.
+PALETTE_FILE = REPO / "presets" / "palettes" / "i1pro_fleet_20261117.json"
+PALETTE_UNIT: dict[int, str] = {
+    0xE002: "ODE7D010", 0xE007: "OD5BCEB3", 0xE00F: "OD0F71E4", 0xE011: "OD0DB292",
+    0xE013: "OD0295D8", 0xE019: "OD5AAAD9", 0xE01D: "OD182A7A", 0xE01F: "OD545743",
+    0xE020: "OD390B21", 0xE101: "OD18F3CD",
+}
+# Panel code of each colour on these BWR/BWY presets: the 2-bit code with plane 0 (the B/W
+# plane) as bit 0 and plane 1 (the colour plane) as bit 1, as in py-opendisplay's
+# encode_gray4_bitplanes. Matched by colour NAME: the swatch charts were sent with the colour
+# setting BOTH planes (code 3), on BWR and on BWY alike, so that is what was measured. The
+# manifests' own "code" (2 for the colour) is the logical palette index, not this.
+PANEL_CODE = {"black": 0, "white": 1, "red": 3, "yellow": 3}
+
+
+def palette_packet(key: int, scheme: int) -> tuple[bytes, str] | None:
+    unit = PALETTE_UNIT.get(key)
+    if unit is None:
+        return None
+    fleet = json.loads(PALETTE_FILE.read_text())
+    u = next(x for x in fleet["units"] if x["device"] == unit)
+    want = {0: ("black", "white"), 1: ("black", "white", "red"), 2: ("black", "white", "yellow")}[scheme]
+    rows = {e["name"]: e for e in u["entries"]}
+    if set(rows) != set(want):
+        raise SystemExit(f"0x{key:04X}: {unit} has colours {sorted(rows)}, scheme {scheme} wants {want}")
+    ents = [(PANEL_CODE[n], tuple(rows[n]["lab_rel_white"])) for n in want]
+    note = (f"0xB0 for full: i1Pro stock colours of {unit} ({PALETTE_FILE.name}), a type default; "
+            f"measured bit 0; {u['glazing']}, use={u['use']}"
+            + (f" ({u['use_note']})" if u.get("use_note") else ""))
+    return cal_body(0, ents), note
 
 
 # Same glass and drive as a 2.x model, other colour: (key, base 2.x model id, name, 3.0 scheme).
