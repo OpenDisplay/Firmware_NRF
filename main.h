@@ -14,6 +14,7 @@ extern uint8_t rebootFlag;
 bool is_ble_active(void);
 void advertising_restart_with_updated_msd(void);
 void enter_dfu_mode(void);
+void system_reset(void);
 void enter_deep_sleep(void);
 
 #endif

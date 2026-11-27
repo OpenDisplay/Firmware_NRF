@@ -1,0 +1,1743 @@
+/* ==========================================================================
+ * opendisplay_structs.h  --  OpenDisplay config & message wire-payload contract
+ * ==========================================================================
+ *
+ * PURPOSE
+ *   Single source of truth for the LAYOUT of every payload that travels on the
+ *   OpenDisplay BLE wire: the config-transfer TLV packets (CONFIG_WRITE /
+ *   CONFIG_READ bodies), the fixed-size opcode message payloads (PIPE, partial
+ *   write, auth, LED flash), and the BLE manufacturer-specific advertisement.
+ *   Where opendisplay_protocol.h owns the FRAMING (opcodes, response/status
+ *   bytes, errors, envelope), THIS file owns the CONTENTS -- the real C enums,
+ *   bitfield definitions, and packed structs that describe those bytes.
+ *
+ *   A new engineer or an AI agent should be able to hand-decode a captured
+ *   config blob or advertisement BYTE-BY-BYTE from THIS FILE ALONE: every field
+ *   is documented in wire order with its meaning, valid values, units, default,
+ *   and endianness. This header is also the CODEGEN SOURCE -- the machine-
+ *   readable `@tag` annotations drive generation of the Swift / Python / JS
+ *   type mirrors (see docs/shared-types-plan.md); codegen must carry the prose
+ *   through as idiomatic doc comments in each target language.
+ *
+ *   OD_STRUCTS_VERSION  2.3   (MAJOR.MINOR spec marker for THIS file; see
+ *                              VERSIONING POLICY below -- NOT sent on the wire)
+ *   LAST CHANGED        2026-11-06
+ *
+ *   The two version schemes carried here are DISTINCT (see §6 Q2 of the plan):
+ *     - OD_STRUCTS_VERSION_* : documents this spec file, like protocol.h's
+ *       OD_PROTOCOL_VERSION. A compatibility marker; never transmitted.
+ *     - OD_CONFIG_VERSION / OD_CONFIG_MINOR_VERSION : the ON-WIRE config-format
+ *       version (currently 1 / 6). The OuterPacketHeader.version byte transmits
+ *       the MAJOR; the minor is negotiated/inspected by peers.
+ *
+ * --------------------------------------------------------------------------
+ * VERSIONING POLICY  (same shape as opendisplay_protocol.h, scoped to PAYLOAD
+ *                     layout instead of framing)
+ * --------------------------------------------------------------------------
+ *   OD_STRUCTS_VERSION is MAJOR.MINOR and describes the payload SPEC in this
+ *   file. It is a compatibility / documentation marker, NOT transmitted.
+ *
+ *   Bump MAJOR (x.0) for a BREAKING layout change -- one that makes a peer
+ *   built against the previous version misread payload bytes:
+ *     - moving, resizing, renumbering, or re-typing an existing field;
+ *     - changing a field's endianness or a struct's total wire size;
+ *     - removing or renumbering an enum value / bit / packet-type id;
+ *     - changing the packed layout / offset of any field.
+ *   Reset MINOR to 0 on every MAJOR bump.
+ *
+ *   Bump MINOR (2.x) for a BACKWARD-COMPATIBLE addition -- old peers keep
+ *   working unchanged:
+ *     - naming a byte carved out of a reserved[] block (the bytes were already
+ *       must-be-zero, so old peers still interop) -- e.g. WifiConfig's server
+ *       fields, the DisplayConfig cs_pin_2 promotion;
+ *     - adding a NEW enum value, bitfield bit, or packet-type id that leaves
+ *       existing ones untouched;
+ *     - appending a NEW optional trailing field old parsers ignore.
+ *
+ *   NO bump for comment / prose clarifications, or renaming a field to its
+ *   canonical spelling when the byte offset and size are unchanged.
+ *
+ *   Rule of thumb -- "could a peer on the previous version misread the bytes?"
+ *     yes                         -> MAJOR
+ *     no, but something new added -> MINOR
+ *     neither                     -> no bump
+ *
+ * --------------------------------------------------------------------------
+ * CHANGELOG  (newest first; entries accrue under "Unreleased" and roll into a
+ *            new version heading on each bump -- see AGENT INSTRUCTIONS below)
+ * --------------------------------------------------------------------------
+ *   Unreleased (since 2.3)
+ *     - Add each payload-layout change here as it lands. On the next version bump,
+ *       move these under a new "MAJOR.MINOR (YYYY-MM-DD)" heading.
+ *     - Firmware 3.0 (Firmware_Unified, decided 2026-11-11; to be adopted by
+ *       opendisplay-protocol):
+ *         PanelIC 3005 OD_PANEL_IC_M5PAPER_960X540; SensorType 7 AHT20 and
+ *         8 PCF8563; DeviceFlags bit 5 OD_DEVICE_FLAG_NM420_INIT; config
+ *         packet 0xB3 OD_PKT_DISPLAY_CONTROLLER; DriveSeqEscape 0x0C WINDOW
+ *         and 0x0D FILL; ActionInfoResponse grows to 8 B (`tables`) and
+ *         `rejected` counts every skipped entry.
+ *
+ *   2.3  (2026-11-06)  -- action table + image-store payloads (Firmware_Unified BG22)
+ *     - Config packet 0xB2 = OD_PKT_ACTION_TABLE (length-prefixed, SINGLETON):
+ *       a sequence of ActionEntryHead (6 B) + step_count x ActionStep (4 B)
+ *       records -- trigger -> ordered effects with centisecond delays, run by
+ *       the device with no host connected. New enums ActionTrigger
+ *       (OD_ACTION_TRIG_*), ActionEffect (OD_ACTION_EFF_*), bits
+ *       ActionEntryFlags (OD_ACTION_FLAG_ENABLED), limit OD_ACTION_STEPS_MAX (8).
+ *       Documented rules: at most one 0xB2 (the device resolves by FIRST match,
+ *       so a second is silently shadowed -- clients REPLACE, never append);
+ *       structural faults stop the walk; unknown trigger/effect is accepted but
+ *       INACTIVE. Landed from Firmware_Unified (od_action.h, BG22_ACTION_SYSTEM.md)
+ *       where it shipped first as a target-local id.
+ *     - Message payloads for the protocol.h 2.4 image-store/action opcodes:
+ *       FlashInfoResponse (CMD_FLASH_INFO, 10 B), FlashSlotRecord
+ *       (CMD_FLASH_LIST, 6 B per slot), ActionInfoResponse (CMD_ACTION_INFO,
+ *       7 B), and the FlashSlotState enum (bit-lattice slot states).
+ *     - OD_CONFIG_MINOR_VERSION 5 -> 6: catches up with the "@since 1.6" tags
+ *       that 2.2 already put on the 0x80+ range and the drive packets (2.2 left
+ *       the constant at 5), and covers 0xB2.
+ *     - Fix: OD_STRUCTS_VERSION_MINOR/_STR were left at 1 / "2.1" by the 2.2
+ *       entry above; they now read 3 / "2.3".
+ *     - Doc-only: the drive-sequence banner notes which escapes are refused by
+ *       which executor (OD_ERR_DRIVE_SEQ_UNSUPPORTED is the portable signal).
+ *
+ *   2.2  (2026-11-03)  -- config-driven display driver (DRIVER_MIGRATION.md Rev 2)
+ *     - LENGTH-PREFIXED PACKET RANGE: packet-type ids 0x80-0xFF now carry a
+ *       2-byte LE body length after the id (SinglePacketHeaderEx), so a reader
+ *       can SKIP a type it does not know. The legacy range 0x00-0x7F is FROZEN
+ *       (no new fixed-size types, ever; 0x2D findmy_config is the last) and
+ *       writers MUST place all 0x80+ packets AFTER every legacy packet: an old
+ *       reader stops at the first 0x80+ id and keeps everything before it.
+ *     - Drive-data packets 0xAE-0xB1 (display_mode / display_lut /
+ *       display_calibration / display_panel): the panel drive recipe --
+ *       sequences, waveforms, BUSY policy, colour code map, calibration -- as
+ *       config data, replacing the firmware's compiled-in panel table. Variable
+ *       bodies: a fixed HEAD struct + one documented tail each. Packet ids
+ *       0x2E-0x31 were burned by pre-release lab builds carrying fixed-size
+ *       drafts of the same packets and are RESERVED -- never reuse.
+ *     - Drive sequence encoding: OD_SEQ_ESC_* escape set (busy / substitutions /
+ *       image / waveform / delay / SET-PIN / image-slice / CS-select /
+ *       read-scratch / write-from-scratch / waveform-slice), DriveSeqPinRef
+ *       (config-referenced pins so sequences stay board-independent),
+ *       DriveTempPolicy (device-enforced). Escapes 0x80+ reserved as
+ *       length-carrying for skippable future extensions; an executor MUST
+ *       pre-validate and refuse a sequence containing an escape it does not
+ *       implement (OD_ERR_DRIVE_SEQ_UNSUPPORTED, protocol.h 2.3).
+ *     - FindMyConfig packet 0x2D (128 B, singleton) folded back from the
+ *       Firmware_Silabs vendored superset where it shipped first: proximity-
+ *       network provisioning (FMDN / network A), FindMyCurve enum,
+ *       FindMyFlags bits. Parity restore; closes the "py-opendisplay cannot
+ *       read past 0x2D" interop hole by giving the layout one canonical home.
+ *     - ColorScheme value 10 = OD_COLOR_SCHEME_BWRY16: BWRY packing with a
+ *       16-colour multi-pass palette. Packs identically to BWRY(3); the pass
+ *       count comes from the display_mode packet. Value 9 is SKIPPED on
+ *       purpose (epaper-dithering uses 9 for a library-local Grayscale8 that
+ *       is deliberately not a wire value). MUST NOT be written into
+ *       DisplayConfig.color_scheme (0x20) -- 16-colour is a property of a MODE
+ *       (display_mode.color_scheme), the panel's scheme stays BWRY.
+ *     - DisplayConfig: reserved_pin_3..8 renamed aux_pin_1..6 (reserved-carve,
+ *       no size change): auxiliary panel-related pins (BS bus-select, waveform-
+ *       EEPROM CS/MISO, ...) addressed from drive sequences via DriveSeqPinRef.
+ *       0x00 AND 0xFF both mean "not wired" (legacy configs carry 0 here).
+ *     - LedFlags bit4: OD_LED_FLAG_BUTTON_PRESS (short LED flash on physical
+ *       button press / button-wake synthetic click; default off).
+ *     - BuzzerFlags bit1: OD_BUZZER_FLAG_BUTTON_PRESS (short chirp on physical
+ *       button press / button-wake synthetic click; default off).
+ *     - MsdStatusBits bit3: OD_MSD_STATUS_ENCRYPTION_ENABLED (1 = app-layer
+ *       encryption active). Firmware sets it when encryption_enabled and master
+ *       key are non-zero; dynamic[11] is all 0xFF when no display is configured.
+ *       (Folded back from the Firmware side, PR #157 — parity restore.)
+ *
+ *   2.1  (2026-08-30)
+ *     - Add PanelIC value OD_PANEL_IC_M5PAPERS3_960X540 = 3004 (M5Stack PaperS3,
+ *       ED047TC1-class 960x540 parallel panel, 16-gray capable; FastEPD native
+ *       parallel path). Backward-compatible enum addition (@since 1.5); the
+ *       on-wire config-format minor bumps 4 -> 5 (OD_CONFIG_MINOR_VERSION).
+ *     - Doc-only: fixed two comment shapes the codegen parser mis-read and added
+ *       the CODEGEN AUTHORING RULES banner section to prevent recurrence. Split the
+ *       combined BusFlags/PinBitmap @bits comment into one comment per group; folded
+ *       OuterPacketHeader's trailing FOLLOWUP note inside its @doc quote. No wire
+ *       change; regenerated the language mirrors.
+ *     - Named the skipped/reserved bits inside two bitfield groups with explicit
+ *       placeholder macros (no wire change; these bits stay reserved-must-be-0):
+ *       TransmissionModes bit5/bit6 -> OD_TRANSMISSION_MODE_RESERVED_5/_6;
+ *       MsdStatusBits bit3 -> OD_MSD_STATUS_RESERVED_3. Documentation only.
+ *
+ *   2.0  (2026-07-18)
+ *     - Initial canonical shared payload contract: the wire-payload counterpart
+ *       to opendisplay_protocol.h, reconciling the per-repo opendisplay_structs.h
+ *       / structs.h supersets and the website config.yaml (ble_proto v1.4) into
+ *       one self-documenting header vendored into all firmware repos.
+ *     - 15 config TLV packet structs + 2 framing structs + 9 message/advert
+ *       structs, all packed with sizeof static-asserts; 19 value enums; the
+ *       bitfield groups; and the loose wire constants (OD_CONFIG_VERSION pair,
+ *       CRC constants, OD_PIN_UNUSED).
+ *     - Reconciliations (superset of every source; total sizes unchanged):
+ *       SystemConfig pwr_pin_2/3 named; ManufacturerData simple_config_* named;
+ *       PowerOption charge/min_wake/screen_timeout tail named; DisplayConfig
+ *       cs_pin_2 + full_update_mC + legacy_tag_type; SensorData i2c_addr_7bit +
+ *       msd_data_start_byte; BinaryInputs input_pin_1..8 / pins_used +
+ *       power_off_flags / power_off_hold_sec.
+ *     - ColorScheme value 7 = SEVEN_COLOR (config.yaml "7color"); the former
+ *       firmware COLOR_SCHEME_GRAY8 = 7 was a mistake and is dropped outright
+ *       (no gray8 at any value).
+ *     - WifiConfig extended AHEAD of firmware: server_host[64] + server_port
+ *       (big-endian) promoted out of reserved[] (backward-compatible carve).
+ *     - Message payloads (previously hand-parsed and drifting in Swift/JS) given
+ *       a single machine-readable home: LedFlashPattern, MsdAdvertisement,
+ *       PipeStartRequest/Response, PipePartialExt, PipeSack,
+ *       PartialWriteStartHeader (all-big-endian geometry), AuthChallenge,
+ *       AuthProof.
+ *
+ * --------------------------------------------------------------------------
+ * AGENT INSTRUCTIONS -- changelog upkeep (perform on EVERY edit to this file)
+ * --------------------------------------------------------------------------
+ *   1. Set LAST CHANGED (top) to the date of your edit.
+ *   2. Add a bullet describing the change under "Unreleased (since x.y)".
+ *   3. Classify the change via the VERSIONING POLICY above: layout-breaking =>
+ *      MAJOR, backward-compatible addition => MINOR, doc-only => no bump.
+ *   4. VALIDATE before finishing: confirm the accumulated "Unreleased" entries
+ *      are consistent with OD_STRUCTS_VERSION. When a bump is warranted, update
+ *      OD_STRUCTS_VERSION_MAJOR / _MINOR / _STR, add a new "MAJOR.MINOR
+ *      (YYYY-MM-DD)" heading, move the Unreleased entries beneath it (reset
+ *      MINOR to 0 on a MAJOR bump), and leave "Unreleased" empty.
+ *   5. If a change alters the ON-WIRE format, also bump OD_CONFIG_VERSION /
+ *      OD_CONFIG_MINOR_VERSION and note it -- that pair is independent of the
+ *      spec marker and is what peers actually negotiate.
+ *   6. Never delete or rewrite historical entries -- the changelog is append-only.
+ *   7. Every packed struct MUST keep its trailing
+ *      OD_STATIC_ASSERT(sizeof(struct X) == N, ...); if you change a layout,
+ *      change the asserted size to match (and treat it as a MAJOR change).
+ *
+ * CANONICAL LOCATION
+ *   opendisplay-protocol/src/opendisplay_structs.h
+ *
+ *   VENDORED COPY IN FIRMWARE REPOS -- DO NOT EDIT THERE.
+ *   Sync every copy byte-for-byte via tools/sync_protocol_header.py (same
+ *   mechanism as opendisplay_protocol.h; same include guard so the vendored
+ *   file is a drop-in replacement for each repo's existing opendisplay_structs.h).
+ *
+ * --------------------------------------------------------------------------
+ * LANGUAGE / LINKAGE RULE  (INVERTED from opendisplay_protocol.h)
+ * --------------------------------------------------------------------------
+ *   opendisplay_protocol.h is macro-only. THIS header is the opposite: it
+ *   intentionally CONTAINS real `enum`s and packed `struct`s -- that is its
+ *   purpose (they are the codegen source). It must still compile clean as BOTH
+ *   C99 and C++, the same gate as protocol.h:
+ *       cc  -std=c99 -fsyntax-only src/opendisplay_structs.h
+ *       c++          -fsyntax-only src/opendisplay_structs.h
+ *   Constraints that keep it portable and drop-in:
+ *     - Enums are PLAIN (not `enum class`); every enumerator has an EXPLICIT
+ *       value and an `OD_` prefix (unprefixed spellings such as
+ *       COLOR_SCHEME_MONO are live macros in the firmware repos, so an
+ *       `OD_`-prefixed enumerator lets both coexist during migration).
+ *     - Struct and field names match the firmware repos EXACTLY (DisplayConfig,
+ *       instance_number, ...) so the vendored header is a drop-in.
+ *     - NO functions. NO typedefs of RAM-only / in-memory types. NO
+ *       repo-specific values (GPIO pin values, buffer sizes, GlobalConfig,
+ *       EncryptionSession, ImageData, PipeWriteState, ButtonState). Those move
+ *       to a repo-local header on adoption -- mirror of protocol.h's "no
+ *       typedefs here" rule, inverted: "no in-memory / RAM-only types here".
+ *     - This header #includes opendisplay_protocol.h and NEVER redeclares a name
+ *       it already `#define`s. protocol.h defines OD_NFC_IC_* as MACROS; an
+ *       `enum` member of the same spelling would be textually rewritten by the
+ *       macro and fail to compile. So the nfc_ic_type field is @enum-bound to
+ *       protocol.h's OD_NFC_IC_* rather than re-enumerated here; likewise pipe
+ *       flags bind to protocol.h's PIPE_FLAG_*.
+ *
+ * --------------------------------------------------------------------------
+ * BLOB-WIDE CONVENTIONS  (from config.yaml `meta`; hold for EVERY struct here)
+ * --------------------------------------------------------------------------
+ *   (1) BYTE ORDER is LITTLE-ENDIAN by default. Multi-byte fields are LE unless
+ *       a field carries an `@endian be` tag. The big-endian exceptions in this
+ *       header are: WifiConfig.server_port, and the ENTIRE PartialWriteStartHeader
+ *       (0x76) geometry. (Note the PIPE 0x80 partial extension packs the same
+ *       geometry LITTLE-endian -- see PipePartialExt.)
+ *   (2) All wire structs are PACKED (__attribute__((packed)); no implicit
+ *       padding between fields.
+ *   (3) RESERVED fields MUST be written as 0 and are ignored by older parsers
+ *       (this is what makes carving names out of reserved[] backward-compatible).
+ *   (4) BITFIELDS number from bit 0 = LSB. Unused bits MUST be 0.
+ *
+ *   Two more file-wide notes:
+ *     - OuterPacketHeader.length FOLLOWUP: the leading u16 `length` is populated
+ *       inconsistently across encoders -- the website toolbox patches it to the
+ *       real total, but some encoders leave it as a zero pad. The CRC is ALWAYS
+ *       computed as if `length` were 0x0000 regardless. Do not rely on `length`
+ *       until the contract is pinned; see OuterPacketHeader below.
+ *     - Silicon-specific pin ENCODINGS (e.g. nRF54 (port<<4)|pin, Silabs 0xPN)
+ *       are target-defined: every pin field here is a raw u8; its bit encoding
+ *       is decided by the receiving firmware, not by this header.
+ *     - The image dither-algorithm ids (DitherMode) are owned by epaper-dithering
+ *       and are NOT wire values -- they appear in no packet here and are omitted.
+ *
+ * --------------------------------------------------------------------------
+ * TAG CONVENTION  (machine-readable annotations for codegen; live in the SAME
+ * trailing comment as the human prose. grep-able, line-anchored.)
+ *   @packet 0xNN        this struct is config TLV packet-type 0xNN
+ *   @message CMD_X      this struct is the fixed payload of opcode CMD_X
+ *   @required           config packet MUST be present in a valid blob
+ *   @repeatable [max=N] config packet MAY repeat, up to N instances (absent => 1)
+ *   @enum <Name>        field's values are the named enum (may reference protocol.h)
+ *   @bits <Group>       field is a bitfield of the named group
+ *   @endian le|be       multi-byte field byte order (default le; be must be tagged)
+ *   @reserved           must-be-zero forward-compat padding
+ *   @unit <u>           physical unit of the value (px, mm, mC, ms, s, mAh, uA)
+ *   @min/@max/@default  bounded-integer range / default value
+ *   @since <cfgver>     on-wire config version the field/value first appeared in
+ *   @changed "<note>"   wire-visible change history for the item
+ *   @width <bytes>      intended on-wire width of an enum
+ *   @external <comp>    enum mirrors / relates to an outside component
+ *   @doc "<text>"       human prose (also the primary deliverable of this file)
+ *
+ * --------------------------------------------------------------------------
+ * CODEGEN AUTHORING RULES  (AGENT INSTRUCTIONS -- keep tools/structs_model.py able
+ * to parse this file; the stdlib parser hard-errors or MIS-ATTRIBUTES on anything
+ * outside this shape, and the Python/JS/... mirrors are GENERATED from here)
+ * --------------------------------------------------------------------------
+ *   A. One shape per construct, one declaration per line (no `uint8_t a, b;`):
+ *        - enum Name { OD_X = <int literal>, ... };   explicit values, OD_-prefixed.
+ *        - struct Name { <uintN_t> f; <uintN_t> f[<int literal>]; ... }
+ *              __attribute__((packed));   fixed-width scalars/arrays ONLY -- NO C
+ *              bitfields (uint8_t x:3), unions, nested structs, or macro-sized arrays.
+ *        - #define OD_..._NAME (1u << N)   for bit flags (mask/shift consts allowed).
+ *   B. Every packed struct ENDS with OD_STATIC_ASSERT(sizeof(struct X) == N, ...);
+ *      the parser sums the field widths and validates them against N -- that assert
+ *      IS the layout oracle (it replaces a compiler front-end). Keep it exact.
+ *   C. Each @bits group gets its OWN group comment. Do NOT describe two @bits groups
+ *      in one comment block: the parser attaches one comment per group, so a shared
+ *      block mis-labels the later group. (Regression fixed 2026-07-18.)
+ *   D. ALL prose that must reach the generated docs goes INSIDE the `@doc "..."`
+ *      quotes. Text AFTER the closing quote (trailing notes, `FOLLOWUP:` lines) is
+ *      DROPPED by the parser -- fold such notes into the quoted @doc. (Fixed 2026-07-18.)
+ *   E. Never redeclare a name opendisplay_protocol.h `#define`s; bind fields to it
+ *      with @enum instead (see LANGUAGE / LINKAGE RULE above).
+ *   F. AFTER ANY EDIT to values/layout/docs, regenerate the mirrors and confirm no
+ *      drift (do this in the same change, like protocol.h's gen tools):
+ *        python3 tools/gen_python_structs.py --write   # then commit the .py
+ *        python3 tools/gen_python_structs.py --check    # CI gate; exit 1 on drift
+ *      (add the same for future JS/Swift emitters as they land).
+ * ========================================================================== */
+
+#ifndef OPENDISPLAY_STRUCTS_H
+#define OPENDISPLAY_STRUCTS_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "opendisplay_protocol.h"  /* framing: CMD_*, RESP_*, OD_NFC_IC_*, PIPE_FLAG_*, ... */
+
+/* Payload-spec revision, MAJOR.MINOR. Documents THIS file; NOT sent on the wire.
+ * Distinct from the on-wire OD_CONFIG_VERSION pair defined in SECTION 1. */
+#define OD_STRUCTS_VERSION_MAJOR       2u
+#define OD_STRUCTS_VERSION_MINOR       3u
+#define OD_STRUCTS_VERSION_STR         "2.3"
+
+/* --------------------------------------------------------------------------
+ * Portable compile-time size check. Defined once here; every packed struct is
+ * followed by OD_STATIC_ASSERT(sizeof(struct X) == N, "..."). The C99 fallback
+ * uses a __LINE__-uniquified typedef name so repeated asserts do not collide
+ * (a fixed typedef name warns "redefinition of typedef is a C11 feature" under
+ * -std=c99, which is the gate used for this header).
+ * -------------------------------------------------------------------------- */
+#if defined(__cplusplus)
+  #define OD_STATIC_ASSERT(expr, msg) static_assert(expr, msg)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+  #define OD_STATIC_ASSERT(expr, msg) _Static_assert(expr, msg)
+#else
+  #define OD_STATIC_ASSERT_CAT_(a, b) a##b
+  #define OD_STATIC_ASSERT_CAT(a, b)  OD_STATIC_ASSERT_CAT_(a, b)
+  #define OD_STATIC_ASSERT(expr, msg) \
+      typedef char OD_STATIC_ASSERT_CAT(od_static_assert_, __LINE__)[(expr) ? 1 : -1]
+#endif
+
+/* ==========================================================================
+ * SECTION 1 -- CONFIG TRANSFER FRAMING
+ * ==========================================================================
+ * A full config transfer is one OUTER packet:
+ *     [OuterPacketHeader][single_packet]...[single_packet][crc:2 LE]
+ * where each single_packet is:
+ *     [SinglePacketHeader][payload]
+ * The payload is a fixed-size struct chosen by SinglePacketHeader.id (see the
+ * ConfigPacketType enum in SECTION 2). The whole outer packet is what a
+ * CONFIG_WRITE (opcode 0x0041, opendisplay_protocol.h) transmits and a
+ * CONFIG_READ (0x0040) returns.
+ * ========================================================================== */
+
+/* On-wire config-format version. UNLIKE OD_STRUCTS_VERSION / OD_PROTOCOL_VERSION,
+ * these ARE transmitted / negotiated: OuterPacketHeader.version carries the
+ * MAJOR byte. At 1.6 as of this header (the app's bundled config.yaml is at
+ * minor 3 and must catch up). */
+#define OD_CONFIG_VERSION              1u   /* @doc "outer-packet major version byte" */
+#define OD_CONFIG_MINOR_VERSION        6u   /* @doc "config-format minor; backward-compatible additions" */
+
+/* CRC over the outer packet. CRC16-CCITT, poly 0x1021, init 0xFFFF, computed
+ * over length+version+packets AS IF the 2-byte length field were 0x0000 (the
+ * toolbox computes the CRC before patching length), with the 2-byte CRC field
+ * itself excluded. This "length treated as zero" quirk is mandatory to match. */
+#define OD_CONFIG_CRC_POLY             0x1021u /* @doc "CRC16-CCITT polynomial" */
+#define OD_CONFIG_CRC_INIT             0xFFFFu /* @doc "CRC16-CCITT initial value" */
+
+/* The pervasive "pin not present" sentinel. A pin field set to 0xFF means the
+ * pin is absent / unused (some fields also treat 0 as unused -- noted per field).
+ * Wire-meaningful, so canonical here (was GPIO_PIN_UNUSED in the repos). */
+#define OD_PIN_UNUSED                  0xFFu   /* @doc "pin field value meaning 'no pin'" */
+
+/** @packet outer  @doc "Wraps the whole transfer: a length+version header, then a
+ *  sequence of single_packet entries, then a trailing CRC (NOT part of this
+ *  struct -- it is the last 2 bytes of the outer packet). FOLLOWUP: `length` is
+ *  populated inconsistently (the website toolbox patches it to the real total incl.
+ *  CRC; some encoders leave it a zero pad -> [00 00][version]...). The CRC is always
+ *  computed as if `length` were 0x0000. Verify whether any receiver relies on
+ *  `length` before firmware depends on it." */
+struct OuterPacketHeader {
+    uint16_t length;  /**< @endian le @doc "total outer-packet length INCLUDING the trailing CRC. Inconsistently populated -- may be a real total or a zero pad; the CRC is computed as if this were 0x0000 either way." */
+    uint8_t  version; /**< @enum OD_CONFIG_VERSION @doc "config-format MAJOR version = OD_CONFIG_VERSION (1). The minor is not carried in the header." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct OuterPacketHeader) == 3, "OuterPacketHeader wire size");
+
+/** @packet single  @doc "Header preceding each config payload inside the outer
+ *  packet. The payload that follows is a fixed-size struct whose size and layout
+ *  are determined entirely by `id` (see ConfigPacketType); there is no per-packet
+ *  length field -- sizeof the selected struct IS the payload length." */
+struct SinglePacketHeader {
+    uint8_t number; /**< @doc "0-based sequential packet index within the outer packet." */
+    uint8_t id;     /**< @enum ConfigPacketType @doc "packet-type id selecting the payload struct." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct SinglePacketHeader) == 2, "SinglePacketHeader wire size");
+
+/** @packet single-ex  @since 1.6  @doc "Header preceding each config payload whose
+ *  packet-type id is 0x80-0xFF: the LENGTH-PREFIXED range. Unlike the legacy
+ *  range (0x00-0x7F, SinglePacketHeader, payload length implied by the type),
+ *  these carry an explicit 2-byte LE body length, so ANY reader that knows this
+ *  one rule can SKIP a type it does not know and keep parsing. Rules:
+ *  (1) the legacy range 0x00-0x7F is FROZEN -- no new fixed-size packet types,
+ *      ever; 0x2D findmy_config is the last one.
+ *  (2) writers MUST place all 0x80+ packets AFTER every legacy packet. A legacy
+ *      reader stops at the first id it does not know; with 0x80+ sorted last it
+ *      sees exactly the config it understands and loses nothing.
+ *  (3) `length` counts BODY bytes only (not this 4-byte header), so a packet
+ *      occupies 4 + length bytes on the wire. A config cannot exceed the
+ *      transfer ceiling (4080 B on Silabs), so 16 bits is ample.
+ *  (4) packets are readable in place from flash: the length is known before
+ *      the body is touched, so no decode buffer is needed.
+ *  The same mechanism can later carry a long-form extension of a legacy packet
+ *  (e.g. a hypothetical 0xA0 superset of 0x20): old readers use the legacy one,
+ *  new readers prefer the long form." */
+struct SinglePacketHeaderEx {
+    uint8_t  number; /**< @doc "0-based sequential packet index within the outer packet (continues the legacy numbering)." */
+    uint8_t  id;     /**< @enum ConfigPacketType @doc "packet-type id, 0x80-0xFF (length-prefixed range)." */
+    uint16_t length; /**< @endian le @doc "body length in bytes, EXCLUDING this header. A reader skips an unknown type by advancing 4 + length." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct SinglePacketHeaderEx) == 4, "SinglePacketHeaderEx wire size");
+
+/* ==========================================================================
+ * SECTION 2 -- CONFIG PACKET-TYPE IDS
+ * ==========================================================================
+ * The value of SinglePacketHeader.id. Canonical replacement for the per-repo
+ * CONFIG_PKT_* macros and the comment-only table in opendisplay_protocol.h
+ * SECTION 1. Each id's payload struct, required-ness, and repeatability are
+ * documented on the struct itself in SECTION 4 (via @packet / @required /
+ * @repeatable), not duplicated here.
+ * ========================================================================== */
+
+/** @enum ConfigPacketType  @width 1
+ *  @doc "Config TLV packet-type identifiers (SinglePacketHeader.id)." */
+enum ConfigPacketType {
+    OD_PKT_SYSTEM         = 0x01, /**< @doc "system_config (required, singleton)" */
+    OD_PKT_MANUFACTURER   = 0x02, /**< @doc "manufacturer_data (required, singleton)" */
+    OD_PKT_POWER          = 0x04, /**< @doc "power_option (required, singleton)" */
+    OD_PKT_DISPLAY        = 0x20, /**< @doc "display (repeatable, max 4)" */
+    OD_PKT_LED            = 0x21, /**< @doc "led (repeatable, max 4)" */
+    OD_PKT_SENSOR         = 0x23, /**< @doc "sensor_data (repeatable, max 4)" */
+    OD_PKT_DATA_BUS       = 0x24, /**< @doc "data_bus (repeatable, max 4)" */
+    OD_PKT_BINARY_INPUT   = 0x25, /**< @doc "binary_inputs (repeatable, max 4)" */
+    OD_PKT_WIFI           = 0x26, /**< @doc "wifi_config (singleton)" */
+    OD_PKT_SECURITY       = 0x27, /**< @doc "security_config (singleton)" */
+    OD_PKT_TOUCH          = 0x28, /**< @doc "touch_controller (repeatable, max 4)" */
+    OD_PKT_BUZZER         = 0x29, /**< @doc "buzzer (repeatable, max 4). Canonical name is BUZZER (matches Silabs), resolving the Silabs BUZZER vs NRF54/yaml PASSIVE_BUZZER split; config.yaml's packet name (passive_buzzer) is regenerated to buzzer." */
+    OD_PKT_NFC            = 0x2A, /**< @doc "nfc_config (repeatable, max 2)" */
+    OD_PKT_FLASH          = 0x2B, /**< @doc "flash_config (repeatable, max 2)" */
+    OD_PKT_DATA_EXTENDED  = 0x2C, /**< @doc "data_extended (singleton)" */
+    OD_PKT_FINDMY         = 0x2D, /**< @doc "findmy_config (singleton). THE LAST LEGACY-RANGE ID: 0x00-0x7F is frozen as of structs 2.2 -- all new packet types go in the length-prefixed 0x80+ range (SinglePacketHeaderEx). Ids 0x2E-0x31 were burned by pre-release lab builds (fixed-size drafts of the drive packets now at 0xAE-0xB1) and are RESERVED; never reuse them." @since 1.5 */
+    OD_PKT_DISPLAY_MODE   = 0xAE, /**< @doc "display_mode (length-prefixed; repeatable, max 32): one drive mode -- name, colour scheme, pass count, waveform slots, temperature window, drive sequence." @since 1.6 */
+    OD_PKT_DISPLAY_LUT    = 0xAF, /**< @doc "display_lut (length-prefixed; repeatable, max 8): one waveform slot at its real size." @since 1.6 */
+    OD_PKT_DISPLAY_CAL    = 0xB0, /**< @doc "display_calibration (length-prefixed; repeatable, max 32): per-mode palette -- per-pass codes + measured CIELAB. HOST-ONLY: the device skips it." @since 1.6 */
+    OD_PKT_DISPLAY_PANEL  = 0xB1, /**< @doc "display_panel (length-prefixed; repeatable, max 4): per-panel drive properties -- BUSY trust/sense, colour code map, sleep sequence." @since 1.6 */
+    OD_PKT_ACTION_TABLE   = 0xB2, /**< @doc "action_table (length-prefixed; SINGLETON -- at most one per config, and a client replaces it rather than appending a second): trigger -> effect sequences the device runs locally. Body = ActionEntryHead + ActionStep records; see the 0xB2 section." @since 1.6 */
+    OD_PKT_DISPLAY_CONTROLLER = 0xB3  /**< @doc "display_controller (length-prefixed; per instance, first wins): selects a built-in controller driver (IT8951, MCU-timed parallel) instead of drive packets. v0 body 12 B: instance, version 0, class (0 command-driven, 1 IT8951, 2 parallel), flags (bit0 MIRRORED, bit1 GRAY16, bit2 TEMP_SENSOR), vcom_mv LE16 (0 keep stored), default_temp_c int8 (0x7F driver default), parallel_panel (1 Inkplate 5 V2, 2 Inkplate 10, 3 PaperS3), miso_pin, en_pin, ite_en_pin (0xFF none), reserved 0. A longer body is accepted; an unknown version or class is ignored." @since 3.0 */
+};
+
+/* ==========================================================================
+ * SECTION 3 -- SHARED SCALAR ENUMS
+ * ==========================================================================
+ * Tiny enums reused across several packets. OD_PIN_UNUSED lives in SECTION 1.
+ * ========================================================================== */
+
+/** @enum ActiveLevel  @width 1
+ *  @doc "GPIO active-level polarity. Bound from NfcConfig.field_detect_active,
+ *  NfcConfig.power_active, FlashConfig.power_active." */
+enum ActiveLevel {
+    OD_ACTIVE_LOW  = 0, /**< @doc "signal asserted / present when the pin is LOW" */
+    OD_ACTIVE_HIGH = 1  /**< @doc "signal asserted / present when the pin is HIGH" */
+};
+
+/* ==========================================================================
+ * SECTION 4 -- CONFIG PAYLOAD PACKETS  (in packet-id order)
+ * ==========================================================================
+ * Each block below = the packet's value enums, then its bitfield groups, then
+ * the packed payload struct + a sizeof assert. Read top-to-bottom, in wire
+ * order, to decode a whole config blob. All layouts are the reconciled SUPERSET
+ * of the firmware repos and config.yaml (ble_proto v1.4): every field any source
+ * promoted out of reserved[] is named; reserved[] shrinks; total sizes are
+ * unchanged from the on-wire format.
+ * ========================================================================== */
+
+/* -----------------------------------------------------------------------
+ * 0x01  system_config
+ * ----------------------------------------------------------------------- */
+
+/** @enum ICType  @width 2  @doc "Host MCU/IC of the device (SystemConfig.ic_type)." */
+enum ICType {
+    OD_IC_TYPE_NRF52840              = 1, /**< @doc "nRF52840-based boards" */
+    OD_IC_TYPE_ESP32S3               = 2, /**< @doc "ESP32-S3-based boards" */
+    OD_IC_TYPE_ESP32C3               = 3, /**< @doc "ESP32-C3-based boards" */
+    OD_IC_TYPE_ESP32C6               = 4, /**< @doc "ESP32-C6-based boards" */
+    OD_IC_TYPE_NRF52811              = 5, /**< @doc "nRF52811-based boards" */
+    OD_IC_TYPE_EFR32BG22C222F352GM40 = 6, /**< @doc "Silicon Labs EFR32BG22 boards" */
+    OD_IC_TYPE_NRF54L15              = 7, /**< @doc "Seeed XIAO nRF54L15 (Zephyr)" */
+    OD_IC_TYPE_NRF54LM20             = 8, /**< @doc "Seeed XIAO nRF54LM20A (Zephyr)" */
+    OD_IC_TYPE_ESP32                 = 9  /**< @doc "Classic ESP32-based boards" */
+};
+
+/** @enum ManufacturerId  @width 2  @doc "Device manufacturer (ManufacturerData.manufacturer_id).
+ *  Board-name tables (board_type) are intentionally NOT enumerated here -- they
+ *  live only in config.yaml; board_type stays a raw u8 field." */
+enum ManufacturerId {
+    OD_MANUFACTURER_DIY         = 0, /**< @doc "self-built / DIY devices" */
+    OD_MANUFACTURER_SEEED       = 1, /**< @doc "Seeed Studio" */
+    OD_MANUFACTURER_WAVESHARE   = 2, /**< @doc "Waveshare Electronics" */
+    OD_MANUFACTURER_SOL         = 3, /**< @doc "SOL" */
+    OD_MANUFACTURER_OPENDISPLAY = 4, /**< @doc "OpenDisplay (free giveaways only)" */
+    OD_MANUFACTURER_SOLDERED    = 5  /**< @doc "Soldered Electronics" */
+};
+
+/* SystemConfig.communication_modes @bits CommunicationModes (bits 3-7 reserved). */
+#define OD_COMM_MODE_BLE               (1u << 0) /* @doc "BLE transfer supported" */
+#define OD_COMM_MODE_OEPL              (1u << 1) /* @doc "OEPL (OpenEPaperLink) transfer supported" */
+#define OD_COMM_MODE_WIFI              (1u << 2) /* @doc "WiFi transfer supported" */
+
+/* SystemConfig.device_flags @bits DeviceFlags (bits 5-7 reserved). */
+#define OD_DEVICE_FLAG_PWR_PIN         (1u << 0) /* @doc "device has external power management for the display etc." */
+#define OD_DEVICE_FLAG_XIAO_INIT       (1u << 1) /* @doc "apply Seeed XIAO low-power init" */
+#define OD_DEVICE_FLAG_WS_PP_INIT      (1u << 2) /* @doc "apply Waveshare PhotoPainter low-power init" */
+#define OD_DEVICE_FLAG_PWR_LATCH       (1u << 3) /* @doc "self-holding MOSFET latch on pwr_pin_2; optional long-press shutdown button on pwr_pin_3" */
+#define OD_DEVICE_FLAG_PWR_LATCH_DFF   (1u << 4) /* @doc "74AHC1G79 D-FF latch: pwr_pin_2=D (hold), pwr_pin_3=CP (clock); command 0x0052 releases latch" */
+#define OD_DEVICE_FLAG_NM420_INIT      (1u << 5) /* @doc "apply RockBase NM-EPD-420 low-power init: default peripheral and ADC enable pins LOW; hold them LOW in deep sleep" @since 3.0 */
+
+/** @struct SystemConfig  @packet 0x01  @required
+ *  @doc "Host IC identity, communication capabilities, and power-management pins.
+ *  Required singleton. 22 bytes." */
+struct SystemConfig {
+    uint16_t ic_type;             /**< @enum ICType @endian le @doc "host MCU/IC of this device." */
+    uint8_t  communication_modes; /**< @bits CommunicationModes @doc "supported transfer modes (bitfield)." */
+    uint8_t  device_flags;        /**< @bits DeviceFlags @doc "misc device / power-latch flags (bitfield)." */
+    uint8_t  pwr_pin;             /**< @doc "primary power-management pin; 0xFF = not present." @default 0xFF */
+    uint8_t  reserved[15];        /**< @reserved @doc "future use; must be 0." */
+    uint8_t  pwr_pin_2;           /**< @doc "aux enable / battery-latch hold / pwr_latch_dff D input; 0 or 0xFF = firmware default." */
+    uint8_t  pwr_pin_3;           /**< @doc "aux enable / battery-latch shutdown button / pwr_latch_dff CP clock; 0 or 0xFF = none/default." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct SystemConfig) == 22, "SystemConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x02  manufacturer_data
+ * ----------------------------------------------------------------------- */
+
+/** @struct ManufacturerData  @packet 0x02  @required
+ *  @doc "Manufacturer id, board identity, and the 'simple config' preset indices
+ *  the website UI applied. Required singleton. 22 bytes." */
+struct ManufacturerData {
+    uint16_t manufacturer_id;              /**< @enum ManufacturerId @endian le @doc "device manufacturer." */
+    uint8_t  board_type;                   /**< @doc "board identifier; meaning depends on manufacturer_id. Value table lives in config.yaml only (NOT enumerated here) -- raw u8." */
+    uint8_t  board_revision;               /**< @doc "board revision number." */
+    uint16_t simple_config_driver_index;   /**< @endian le @doc "simple-config driver preset index (1-based; 0 = not set)." */
+    uint16_t simple_config_display_index;  /**< @endian le @doc "simple-config display preset index (1-based; 0 = not set)." */
+    uint16_t simple_config_power_index;    /**< @endian le @doc "simple-config power preset index (1-based; 0 = not set)." */
+    uint8_t  simple_config_configured_at[6]; /**< @endian le @unit s @doc "48-bit little-endian Unix time (seconds) when simple config was last applied." */
+    uint8_t  reserved[6];                  /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct ManufacturerData) == 22, "ManufacturerData wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x04  power_option
+ * ----------------------------------------------------------------------- */
+
+/** @enum PowerMode  @width 1  @doc "Power source (PowerOption.power_mode)." */
+enum PowerMode {
+    OD_POWER_MODE_BATTERY = 1, /**< @doc "battery powered" */
+    OD_POWER_MODE_USB     = 2, /**< @doc "USB powered" */
+    OD_POWER_MODE_SOLAR   = 3  /**< @doc "solar powered" */
+};
+
+/** @enum CapacityEstimator  @width 1
+ *  @doc "Battery chemistry model for state-of-charge estimation (PowerOption.capacity_estimator)." */
+enum CapacityEstimator {
+    OD_CAPACITY_EST_LI_ION           = 1, /**< @doc "1S Li-ion" */
+    OD_CAPACITY_EST_LIFEPO4          = 2, /**< @doc "1S LiFePO4" */
+    OD_CAPACITY_EST_SUPERCAP         = 3, /**< @doc "2S supercapacitor (4.5 V max, 3.6 V cutoff)" */
+    OD_CAPACITY_EST_LITHIUM_PRIMARY  = 4, /**< @doc "lithium primary (non-rechargeable)" */
+    OD_CAPACITY_EST_SEEED_LI_ION     = 5  /**< @doc "1S Li-ion, Seeed reTerminal E-series discharge curve" */
+};
+
+/* PowerOption.sleep_flags @bits SleepFlags (bits 1-7 reserved).
+ * Firmware ships bit0; config.yaml still lists it reserved_0 (yaml is behind). */
+#define OD_SLEEP_FLAG_BUTTON_WAKE_DISABLE   (1u << 0) /* @doc "opt out of button wake from timer deep sleep (buttons sharing wake-hostile pads)" */
+
+/* PowerOption.battery_sense_flags @bits BatterySenseFlags (bits 1-7 reserved).
+ * Firmware ships bit0; config.yaml still lists it reserved_0 (yaml is behind). */
+#define OD_BATTERY_SENSE_FLAG_ENABLE_INVERTED (1u << 0) /* @doc "battery-sense enable is active-low (e.g. XIAO ~READ_BAT on P0.14)" */
+
+/* PowerOption.charger_flags @bits ChargerFlags (bits 2-7 reserved). */
+#define OD_CHARGER_FLAG_ENABLE_ACTIVE_LOW   (1u << 0) /* @doc "charge-enable (/CE) is active-low" */
+#define OD_CHARGER_FLAG_STATE_ACTIVE_LOW    (1u << 1) /* @doc "charge-state (BQ25616 STAT) is active-low: charging when LOW" */
+
+/** @struct PowerOption  @packet 0x04  @required
+ *  @doc "Power source, battery model, sleep/advertising timing, battery-sense and
+ *  charger pins, and EPD keep-alive. Required singleton. 30 bytes." */
+struct PowerOption {
+    uint8_t  power_mode;               /**< @enum PowerMode @doc "power source type." */
+    uint8_t  battery_capacity_mah[3];  /**< @endian le @unit mAh @doc "battery capacity, 24-bit LE; 0 = unknown." */
+    uint16_t sleep_timeout_ms;         /**< @endian le @unit ms @doc "nominal awake/advertising time before sleep (actual may be shorter)." */
+    uint8_t  tx_power;                  /**< @doc "BLE transmit-power setting (platform-specific units)." */
+    uint8_t  sleep_flags;              /**< @bits SleepFlags @doc "sleep-related flags (bitfield)." */
+    uint8_t  battery_sense_pin;        /**< @doc "ADC pin measuring battery voltage; 0xFF = none." @default 0xFF */
+    uint8_t  battery_sense_enable_pin; /**< @doc "pin enabling the battery-sense divider; 0xFF = none." @default 0xFF */
+    uint8_t  battery_sense_flags;      /**< @bits BatterySenseFlags @doc "battery-sense flags (bitfield)." */
+    uint8_t  capacity_estimator;       /**< @enum CapacityEstimator @doc "battery chemistry model." */
+    uint16_t voltage_scaling_factor;   /**< @endian le @doc "ADC voltage scaling / divider factor (implementation-specific)." */
+    uint32_t deep_sleep_current_ua;    /**< @endian le @unit uA @doc "board deep-sleep current excl. MCU; 0 = unknown." */
+    uint16_t deep_sleep_time_seconds;  /**< @endian le @unit s @doc "timer deep-sleep duration (ESP32 on battery); 0 = disabled." */
+    uint8_t  charge_enable_pin;        /**< @doc "BQ25616 charge-enable GPIO; 0 or 0xFF = unused." @default 0xFF */
+    uint8_t  charge_state_pin;         /**< @doc "BQ25616 charge-state input GPIO; 0 or 0xFF = unused." @default 0xFF */
+    uint8_t  charger_flags;            /**< @bits ChargerFlags @doc "charger polarity flags (bitfield)." */
+    uint16_t min_wake_time_seconds;    /**< @endian le @unit s @doc "min awake window after first boot / button wake; 0 = default 120 s." */
+    uint8_t  screen_timeout_seconds;   /**< @unit s @min 0 @max 30 @doc "EPD keep-alive: seconds the panel stays powered after a refresh before shutdown (values >30 clamped; 0 = power off immediately; forced 0 when an AXP2101 PMIC is present)." */
+    uint8_t  reserved[4];              /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct PowerOption) == 30, "PowerOption wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x20  display   (external-related enums PanelIC + ColorScheme inline)
+ * ----------------------------------------------------------------------- */
+
+/** @enum DisplayTechnology  @width 1  @doc "Display technology (DisplayConfig.display_technology)." */
+enum DisplayTechnology {
+    OD_DISPLAY_TECH_UNDEFINED  = 0, /**< @doc "undefined / unspecified" */
+    OD_DISPLAY_TECH_E_PAPER    = 1, /**< @doc "e-paper / ESL" */
+    OD_DISPLAY_TECH_LCD        = 2, /**< @doc "LCD" */
+    OD_DISPLAY_TECH_LED_MATRIX = 3  /**< @doc "LED-matrix display" */
+};
+
+/** @enum Rotation  @width 1  @doc "Physical panel rotation (DisplayConfig.rotation)." */
+enum Rotation {
+    OD_ROTATION_0   = 0, /**< @doc "0 degrees" */
+    OD_ROTATION_90  = 1, /**< @doc "90 degrees" */
+    OD_ROTATION_180 = 2, /**< @doc "180 degrees" */
+    OD_ROTATION_270 = 3  /**< @doc "270 degrees" */
+};
+
+/** @enum PartialUpdateSupport  @width 1  @doc "Panel partial-update capability (DisplayConfig.partial_update_support)." */
+enum PartialUpdateSupport {
+    OD_PARTIAL_UPDATE_NONE       = 0, /**< @doc "only full updates supported" */
+    OD_PARTIAL_UPDATE_SUPPORTED  = 1, /**< @doc "partial updates supported" */
+    OD_PARTIAL_UPDATE_FULL_FRAME = 2  /**< @doc "partial supported but a full-frame stream is required" */
+};
+
+/** @enum ColorScheme  @width 1
+ *  @external mirror: epaper-dithering packages/rust/core/src/palettes.rs (integer
+ *  values MUST match; the crate declares itself a firmware mirror). informed-by:
+ *  bb_epaper. The value->plane/packing meaning is OpenDisplay-owned here.
+ *  @doc "display color/plane scheme (DisplayConfig.color_scheme); drives plane
+ *  count and pixel packing." */
+enum ColorScheme {
+    OD_COLOR_SCHEME_MONO         = 0,   /**< @doc "1bpp black/white" */
+    OD_COLOR_SCHEME_BWR          = 1,   /**< @doc "black/white/red" */
+    OD_COLOR_SCHEME_BWY          = 2,   /**< @doc "black/white/yellow" */
+    OD_COLOR_SCHEME_BWRY         = 3,   /**< @doc "black/white/red/yellow" */
+    OD_COLOR_SCHEME_BWGBRY       = 4,   /**< @doc "Spectra 6-color (black/white/green/blue/red/yellow)" */
+    OD_COLOR_SCHEME_GRAY4        = 5,   /**< @doc "2bpp 4-level gray" */
+    OD_COLOR_SCHEME_GRAY16       = 6,   /**< @doc "4bpp 16-level gray" */
+    OD_COLOR_SCHEME_SEVEN_COLOR  = 7,   /**< @doc "7-color (Spectra/ACeP 7, config.yaml '7color')" @changed "2.0: value 7 is SEVEN_COLOR; the former COLOR_SCHEME_GRAY8=7 was a mistake (gray8 is not a real scheme) and is removed -- not renumbered." */
+    OD_COLOR_SCHEME_BWGBRY_SPLIT = 8,   /**< @doc "Spectra 6 nibbles, left-half plane then right-half plane (dual-CS panels, no device framebuffer)" */
+    OD_COLOR_SCHEME_BWRY16       = 10,  /**< @doc "BWRY packing with a 16-colour multi-pass palette. Packs IDENTICALLY to BWRY(3): 2bpp, one plane; the number of frames comes from the display_mode (0xAE) pass count, not from this value. Exists so a host image pipeline can select the 16-entry palette (display_calibration 0xB0). MUST NOT be written into DisplayConfig.color_scheme -- the PANEL's scheme stays BWRY(3); 16-colour is a property of a MODE (display_mode.color_scheme). Value 9 is SKIPPED on purpose: epaper-dithering uses 9 for a library-local Grayscale8 that is deliberately not a wire value." @since 1.6 */
+    OD_COLOR_SCHEME_RGB565       = 100, /**< @doc "RGB565 (non-epaper)" */
+    OD_COLOR_SCHEME_RGB888       = 101, /**< @doc "RGB888 (non-epaper)" */
+    OD_COLOR_SCHEME_RGB16BPC     = 102  /**< @doc "16 bits per channel (non-epaper)" */
+};
+
+/** @enum PanelIC  @width 2
+ *  @external bb_epaper (0-76 names track bb_epaper EP* panel identifiers); the
+ *  1000-1030 range comes from the M3 / EPD-nRF5 driver line; 3000+ from the
+ *  FastEPD IT8951 / OpenDisplay runtime. Wire values are OpenDisplay-OWNED; each
+ *  firmware maps value -> its bb_epaper EP* constant via a repo-local
+ *  opendisplay_epd_map.c (NOT part of this header; bb_epaper never dictates the
+ *  wire values). @doc "display controller / panel type (DisplayConfig.panel_ic_type).
+ *  Only representative values are named here; the full list lives in config.yaml." */
+enum PanelIC {
+    OD_PANEL_IC_EP_PANEL_UNDEFINED       = 0   , /**< @doc "undefined / unknown panel" */
+    OD_PANEL_IC_EP42_400X300             = 1   , /**< @doc "WFT0420CZ15 4.2\" B/W" */
+    OD_PANEL_IC_EP42B_400X300            = 2   , /**< @doc "DEPG0420BN / GDEY042T81 4.2\" B/W" */
+    OD_PANEL_IC_EP213_122X250            = 3   , /**< @doc "Waveshare 2.13\"" */
+    OD_PANEL_IC_EP213B_122X250           = 4   , /**< @doc "GDEY0213B74 (Inky pHAT 2.13\" B/W newer)" */
+    OD_PANEL_IC_EP293_128X296            = 5   , /**< @doc "128x296 panel" */
+    OD_PANEL_IC_EP294_128X296            = 6   , /**< @doc "Waveshare newer 2.9\" 1-bit 128x296" */
+    OD_PANEL_IC_EP295_128X296            = 7   , /**< @doc "harvested Solum 2.9\" BW ESLs" */
+    OD_PANEL_IC_EP295_128X296_4GRAY      = 8   , /**< @doc "4-gray variant of EP295" */
+    OD_PANEL_IC_EP266_152X296            = 9   , /**< @doc "GDEY0266T90" */
+    OD_PANEL_IC_EP102_80X128             = 10  , /**< @doc "GDEW0102T4" */
+    OD_PANEL_IC_EP27B_176X264            = 11  , /**< @doc "GDEY027T91" */
+    OD_PANEL_IC_EP29R_128X296            = 12  , /**< @doc "tricolor 2.9 panel" */
+    OD_PANEL_IC_EP122_192X176            = 13  , /**< @doc "GDEM0122T61" */
+    OD_PANEL_IC_EP154R_152X152           = 14  , /**< @doc "1.54\" B/W/R" */
+    OD_PANEL_IC_EP42R_400X300            = 15  , /**< @doc "400x300 tricolor" */
+    OD_PANEL_IC_EP42R2_400X300           = 16  , /**< @doc "GDEQ042Z21" */
+    OD_PANEL_IC_EP37_240X416             = 17  , /**< @doc "GDEY037T03" */
+    OD_PANEL_IC_EP37B_240X416            = 18  , /**< @doc "CROWPANEL 3.7\"" */
+    OD_PANEL_IC_EP213_104X212            = 19  , /**< @doc "InkyPHAT 2.13 B/W" */
+    OD_PANEL_IC_EP75_800X480             = 20  , /**< @doc "GDEY075T7 (older version)" */
+    OD_PANEL_IC_EP75_800X480_4GRAY       = 21  , /**< @doc "GDEW075T7 (older) 4-gray mode" */
+    OD_PANEL_IC_EP75_800X480_4GRAY_V2    = 22  , /**< @doc "GDEY075T7 older panel, darker grays" */
+    OD_PANEL_IC_EP29_128X296             = 23  , /**< @doc "Pimoroni Badger2040" */
+    OD_PANEL_IC_EP29_128X296_4GRAY       = 24  , /**< @doc "Pimoroni Badger2040 4-gray" */
+    OD_PANEL_IC_EP213R_122X250           = 25  , /**< @doc "Inky pHAT 2.13 B/W/R" */
+    OD_PANEL_IC_EP154_200X200            = 26  , /**< @doc "Waveshare 2.0\" B/W" */
+    OD_PANEL_IC_EP154B_200X200           = 27  , /**< @doc "DEPG01540BN" */
+    OD_PANEL_IC_EP266YR_184X360          = 28  , /**< @doc "GDEY0266F51" */
+    OD_PANEL_IC_EP29YR_128X296           = 29  , /**< @doc "GDEY029F51" */
+    OD_PANEL_IC_EP29YR_168X384           = 30  , /**< @doc "GDEY029F51H" */
+    OD_PANEL_IC_EP583_648X480            = 31  , /**< @doc "DEPG0583BN" */
+    OD_PANEL_IC_EP296_128X296            = 32  , /**< @doc "Waveshare 2.9\" 128x296 B/W V2" */
+    OD_PANEL_IC_EP26R_152X296            = 33  , /**< @doc "Solum 2.6\" B/W/R" */
+    OD_PANEL_IC_EP73_800X480             = 34  , /**< @doc "GEDY073D46 (slower, EOL 7-color)" */
+    OD_PANEL_IC_EP73_SPECTRA_800X480     = 35  , /**< @doc "Spectra 6/7-color 800x480" */
+    OD_PANEL_IC_EP74R_640X384            = 36  , /**< @doc "640x384 panel" */
+    OD_PANEL_IC_EP583R_600X448           = 37  , /**< @doc "4-bits-per-pixel 5.83\" panel" */
+    OD_PANEL_IC_EP75R_800X480            = 38  , /**< @doc "Waveshare 800x480 3-color" */
+    OD_PANEL_IC_EP426_800X480            = 39  , /**< @doc "Waveshare 4.26\" B/W 800x480" */
+    OD_PANEL_IC_EP426_800X480_4GRAY      = 40  , /**< @doc "4.26\" 2-bit grayscale mode" */
+    OD_PANEL_IC_EP29R2_128X296           = 41  , /**< @doc "Adafruit 2.9\" Tricolor FeatherWing" */
+    OD_PANEL_IC_EP41_640X400             = 42  , /**< @doc "EInk ED040TC1 SPI UC81xx" */
+    OD_PANEL_IC_EP81_SPECTRA_1024X576    = 43  , /**< @doc "Spectra 8.1\" 1024x576 6-color" */
+    OD_PANEL_IC_EP7_960X640              = 44  , /**< @doc "ED070EC1" */
+    OD_PANEL_IC_EP213R2_122X250          = 45  , /**< @doc "UC8151 3-color 2.13\"" */
+    OD_PANEL_IC_EP29Z_128X296            = 46  , /**< @doc "SSD1680 (CrowPanel 2.9\")" */
+    OD_PANEL_IC_EP29Z_128X296_4GRAY      = 47  , /**< @doc "SSD1680 4-gray" */
+    OD_PANEL_IC_EP213Z_122X250           = 48  , /**< @doc "SSD1680 CrowPanel 2.13\"" */
+    OD_PANEL_IC_EP213Z_122X250_4GRAY     = 49  , /**< @doc "CrowPanel 2.13\" 4-gray mode" */
+    OD_PANEL_IC_EP154Z_152X152           = 50  , /**< @doc "CrowPanel 1.54\"" */
+    OD_PANEL_IC_EP579_792X272            = 51  , /**< @doc "CrowPanel 5.79\"" */
+    OD_PANEL_IC_EP213YR_122X250          = 52  , /**< @doc "GDEY0213F52" */
+    OD_PANEL_IC_EP37YR_240X416           = 53  , /**< @doc "GDEM037F51" */
+    OD_PANEL_IC_EP35YR_184X384           = 54  , /**< @doc "GDEM035F51" */
+    OD_PANEL_IC_EP397YR_800X480          = 55  , /**< @doc "GDEM0397F81" */
+    OD_PANEL_IC_EP154YR_200X200          = 56  , /**< @doc "GDEM0154F51H" */
+    OD_PANEL_IC_EP266YR2_184X360         = 57  , /**< @doc "GDEY0266F52H" */
+    OD_PANEL_IC_EP42YR_400X300           = 58  , /**< @doc "GDEM042F52" */
+    OD_PANEL_IC_EP75_800X480_GEN2        = 59  , /**< @doc "GEDY075-D2 (Waveshare/Xiao V2 panels)" */
+    OD_PANEL_IC_EP75_800X480_4GRAY_GEN2  = 60  , /**< @doc "GDEY075T7-D2 (newer) 4-gray mode" */
+    OD_PANEL_IC_EP215YR_160X296          = 61  , /**< @doc "Waveshare 2.15\" 4-color" */
+    OD_PANEL_IC_EP1085_1360X480          = 62  , /**< @doc "GDEM1085T51" */
+    OD_PANEL_IC_EP31_240X320             = 63  , /**< @doc "GDEQ031T10 LilyGo T-Deck Pro" */
+    OD_PANEL_IC_EP75YR_800X480           = 64  , /**< @doc "EP75YR 800x480 7-color" */
+    OD_PANEL_IC_EP133A_SPECTRA_1200X1600 = 66  , /**< @doc "T133A01 Spectra 6 13.3\" dual-controller (Seeed reTerminal E1004). config.yaml catches up (it skips 65-66 today); value 65 stays reserved." @since 1.4 */
+    OD_PANEL_IC_EP154_200X200_4GRAY      = 67  , /**< @doc "Waveshare 1.54\" 4-gray" */
+    OD_PANEL_IC_EP42B_400X300_4GRAY      = 68  , /**< @doc "DEPG0420BN / GDEY042T81 4-gray" */
+    OD_PANEL_IC_EP397_800X480            = 69  , /**< @doc "GDEM0397T81P" */
+    OD_PANEL_IC_EP397_800X480_4GRAY      = 70  , /**< @doc "GDEM0397T81P 4-gray" */
+    OD_PANEL_IC_EP368_792X528            = 71  , /**< @doc "xteink X3 3.68\" B/W" */
+    OD_PANEL_IC_EP368_792X528_4GRAY      = 72  , /**< @doc "xteink X3 3.68\" 4-gray" */
+    OD_PANEL_IC_EP213ZZ_122X250          = 73  , /**< @doc "LilyGo T3S3 2.13\"" */
+    OD_PANEL_IC_EP40_SPECTRA_400X600     = 74  , /**< @doc "GDEP040E01 Spectra 6 4\" 400x600" */
+    OD_PANEL_IC_EP27_176X264             = 75  , /**< @doc "Badger2350 B/W 2.7\"" */
+    OD_PANEL_IC_EP27_176X264_4GRAY       = 76  , /**< @doc "Badger2350 4-gray 2.7\"" */
+    OD_PANEL_IC_UC8176_420_BW            = 1000, /**< @doc "UC8176 4.2\" B/W (M3 / EPD-nRF5 driver line, values 1000-1030)" */
+    OD_PANEL_IC_SSD1619_420_BWR          = 1001, /**< @doc "SSD1619 4.2\" B/W/R" */
+    OD_PANEL_IC_UC8176_420_BWR           = 1002, /**< @doc "UC8176 4.2\" B/W/R" */
+    OD_PANEL_IC_SSD1619_420_BW           = 1003, /**< @doc "SSD1619 4.2\" B/W" */
+    OD_PANEL_IC_JD79668_420_BWRY         = 1004, /**< @doc "JD79668 4.2\" B/W/R/Y" */
+    OD_PANEL_IC_UC8179_750_BW            = 1005, /**< @doc "UC8179 7.5\" B/W" */
+    OD_PANEL_IC_UC8179_750_BWR           = 1006, /**< @doc "UC8179 7.5\" B/W/R" */
+    OD_PANEL_IC_UC8159_750_LOW_BW        = 1007, /**< @doc "UC8159 7.5\" Low Power B/W" */
+    OD_PANEL_IC_UC8159_750_LOW_BWR       = 1008, /**< @doc "UC8159 7.5\" Low Power B/W/R" */
+    OD_PANEL_IC_SSD1677_750_HD_BW        = 1009, /**< @doc "SSD1677 7.5\" HD B/W" */
+    OD_PANEL_IC_SSD1677_750_HD_BWR       = 1010, /**< @doc "SSD1677 7.5\" HD B/W/R" */
+    OD_PANEL_IC_JD79665_750_BWRY         = 1011, /**< @doc "JD79665 7.5\" B/W/R/Y" */
+    OD_PANEL_IC_JD79665_583_BWRY         = 1012, /**< @doc "JD79665 5.83\" B/W/R/Y" */
+    OD_PANEL_IC_UC8151_029_BW            = 1013, /**< @doc "UC8151 2.9\" 168x384 B/W" */
+    OD_PANEL_IC_UC8151_029_BWR           = 1014, /**< @doc "UC8151 2.9\" 168x384 B/W/R" */
+    OD_PANEL_IC_SSD1619_029_BW           = 1015, /**< @doc "SSD1619 2.9\" 168x384 B/W" */
+    OD_PANEL_IC_SSD1619_029_BWR          = 1016, /**< @doc "SSD1619 2.9\" 168x384 B/W/R" */
+    OD_PANEL_IC_SSD1619_016_BW           = 1017, /**< @doc "SSD1619 1.6\" 200x200 B/W" */
+    OD_PANEL_IC_SSD1619_016_BWR          = 1018, /**< @doc "SSD1619 1.6\" 200x200 B/W/R" */
+    OD_PANEL_IC_SSD1619_022_BW           = 1019, /**< @doc "SSD1619 2.2\" 240x320 B/W" */
+    OD_PANEL_IC_SSD1619_022_BWR          = 1020, /**< @doc "SSD1619 2.2\" 240x320 B/W/R" */
+    OD_PANEL_IC_SSD1619_026_BW           = 1021, /**< @doc "SSD1619 2.6\" 296x152 B/W" */
+    OD_PANEL_IC_SSD1619_026_BWR          = 1022, /**< @doc "SSD1619 2.6\" 296x152 B/W/R" */
+    OD_PANEL_IC_UC8151_027_BW            = 1023, /**< @doc "UC8151 2.7\" 200x300 B/W" */
+    OD_PANEL_IC_UC8151_027_BWR           = 1024, /**< @doc "UC8151 2.7\" 200x300 B/W/R" */
+    OD_PANEL_IC_UC43_430_BW              = 1025, /**< @doc "UC variant 4.3\" 152x522 B/W" */
+    OD_PANEL_IC_UC43_430_BWR             = 1026, /**< @doc "UC variant 4.3\" 152x522 B/W/R" */
+    OD_PANEL_IC_SSD1619_013_BW           = 1027, /**< @doc "SSD1619 1.3\" 144x200 B/W" */
+    OD_PANEL_IC_SSD1619_013_BWR          = 1028, /**< @doc "SSD1619 1.3\" 144x200 B/W/R" */
+    OD_PANEL_IC_SSD1619_022_LITE_BW      = 1029, /**< @doc "SSD1619 M3 Lite 2.2\" 250x128 B/W" */
+    OD_PANEL_IC_SSD1619_022_LITE_BWR     = 1030, /**< @doc "SSD1619 M3 Lite 2.2\" 250x128 B/W/R" */
+    OD_PANEL_IC_ED103TC2_1872X1404       = 3000, /**< @doc "E Ink ED103TC2 + IT8951 (10.3\", 1872x1404, 1bpp; FastEPD IT8951 path, values 3000+)" */
+    OD_PANEL_IC_ED103TC2_1872X1404_4GRAY = 3001, /**< @doc "same panel as 3000; 4bpp (16-level gray via FastEPD)" */
+    OD_PANEL_IC_INKPLATE5V2_1280X720     = 3002, /**< @doc "Soldered Inkplate 5 V2 (ED050WROW, 1280x720, 1bpp; FastEPD native parallel path)" */
+    OD_PANEL_IC_INKPLATE10_1200X825      = 3003, /**< @doc "Soldered Inkplate 10 (ED097TC2, 1200x825, 1bpp; FastEPD native parallel path)" */
+    OD_PANEL_IC_M5PAPERS3_960X540        = 3004, /**< @doc "M5Stack PaperS3 (ED047TC1-class, 960x540, 16-gray capable; FastEPD native parallel path)" @since 1.5 */
+    OD_PANEL_IC_M5PAPER_960X540          = 3005  /**< @doc "M5Stack M5Paper (ED047TC1 behind an IT8951 over SPI; FastEPD IT8951 path)" @since 3.0 */
+};
+
+/* DisplayConfig.transmission_modes @bits TransmissionModes (bits 5-6 reserved --
+ * named as placeholders below; bit7 is defined above the gap). */
+#define OD_TRANSMISSION_MODE_STREAMING_DECOMPRESSION (1u << 0) /* @doc "streaming zlib inflate, 512-byte DEFLATE window (requires zip). Canonical name resolves the Firmware/Silabs ZIPXL vs NRF54/yaml streaming_decompression split." */
+#define OD_TRANSMISSION_MODE_ZIP                     (1u << 1) /* @doc "zip-compressed transfer (full window)" */
+#define OD_TRANSMISSION_MODE_G5                      (1u << 2) /* @doc "Group 5 compression (not yet implemented)" */
+#define OD_TRANSMISSION_MODE_DIRECT_WRITE            (1u << 3) /* @doc "direct-write mode (bufferless)" */
+#define OD_TRANSMISSION_MODE_PIPE_WRITE              (1u << 4) /* @doc "PIPE-write mode: faster transfer via sliding-window pipeline" */
+#define OD_TRANSMISSION_MODE_RESERVED_5              (1u << 5) /* @reserved @doc "reserved; must be 0 (placeholder name for a future transmission mode)" */
+#define OD_TRANSMISSION_MODE_RESERVED_6              (1u << 6) /* @reserved @doc "reserved; must be 0 (placeholder name for a future transmission mode)" */
+#define OD_TRANSMISSION_MODE_CLEAR_ON_BOOT           (1u << 7) /* @doc "Clear screen on boot. Synonymous with config.yaml's no_boot_text / NO_BOOT_TEXT -- same bit, same behavior (clearing on boot is why no boot text shows)." */
+
+/** @struct DisplayConfig  @packet 0x20  @repeatable max=4
+ *  @doc "Per-panel configuration: geometry, controller, SPI pins, color scheme,
+ *  and supported transmission modes. Up to 4 instances. 46 bytes." */
+struct DisplayConfig {
+    uint8_t  instance_number;        /**< @doc "0-based display index (unique per display block)." */
+    uint8_t  display_technology;     /**< @enum DisplayTechnology @doc "panel technology." */
+    uint16_t panel_ic_type;          /**< @enum PanelIC @endian le @doc "display controller / panel type." */
+    uint16_t pixel_width;            /**< @endian le @unit px @doc "panel pixel width." */
+    uint16_t pixel_height;           /**< @endian le @unit px @doc "panel pixel height." */
+    uint16_t active_width_mm;        /**< @endian le @unit mm @doc "active area width." */
+    uint16_t active_height_mm;       /**< @endian le @unit mm @doc "active area height." */
+    uint16_t legacy_tag_type;        /**< @endian le @doc "OEPL legacy tag type (optional; 0 if unused). Canonical snake_case of config.yaml legacy_tagtype / firmware tag_type." */
+    uint8_t  rotation;               /**< @enum Rotation @doc "physical rotation." */
+    uint8_t  reset_pin;              /**< @doc "panel reset GPIO; 0xFF = none." @default 0xFF */
+    uint8_t  busy_pin;               /**< @doc "panel busy-status GPIO; 0xFF = none." @default 0xFF */
+    uint8_t  dc_pin;                 /**< @doc "data/command select; doubles as SPI MISO on OpenDisplay-runtime IT8951 / ED103 panels." */
+    uint8_t  cs_pin;                 /**< @doc "SPI chip-select; 0xFF = none." @default 0xFF */
+    uint8_t  data_pin;               /**< @doc "data-out pin (SPI MOSI / data line)." */
+    uint8_t  partial_update_support; /**< @enum PartialUpdateSupport @doc "partial-update capability." */
+    uint8_t  color_scheme;           /**< @enum ColorScheme @doc "color/plane scheme." */
+    uint8_t  transmission_modes;     /**< @bits TransmissionModes @doc "supported image/data transmission modes (bitfield)." */
+    uint8_t  clk_pin;                /**< @doc "SPI SCLK pin." */
+    uint8_t  cs_pin_2;               /**< @doc "second CS for panels split over 2 drivers (dual-controller Spectra); 0xFF = none. Canonical name (firmware called it reserved_pin_2)." @since 1.4 @default 0xFF */
+    uint8_t  aux_pin_1;              /**< @doc "auxiliary panel pin 1 (was reserved_pin_3; reserved-carve). Board wiring for panel-adjacent signals a drive sequence must touch -- BS bus-select, waveform-EEPROM CS, EEPROM MISO, ... -- addressed from sequences via DriveSeqPinRef, never by GPIO number, so panels.yaml stays board-independent. 0x00 AND 0xFF both mean 'not wired' (legacy configs carry 0 here)." @since 1.6 */
+    uint8_t  aux_pin_2;              /**< @doc "auxiliary panel pin 2 (was reserved_pin_4); see aux_pin_1." @since 1.6 */
+    uint8_t  aux_pin_3;              /**< @doc "auxiliary panel pin 3 (was reserved_pin_5); see aux_pin_1." @since 1.6 */
+    uint8_t  aux_pin_4;              /**< @doc "auxiliary panel pin 4 (was reserved_pin_6); see aux_pin_1." @since 1.6 */
+    uint8_t  aux_pin_5;              /**< @doc "auxiliary panel pin 5 (was reserved_pin_7); see aux_pin_1." @since 1.6 */
+    uint8_t  aux_pin_6;              /**< @doc "auxiliary panel pin 6 (was reserved_pin_8); see aux_pin_1." @since 1.6 */
+    uint16_t full_update_mC;         /**< @endian le @unit mC @doc "energy consumed by a full refresh; 0 = unknown." */
+    uint8_t  reserved[13];           /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DisplayConfig) == 46, "DisplayConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x21  led
+ * ----------------------------------------------------------------------- */
+
+/** @enum LedType  @width 1  @doc "LED wiring type (LedConfig.led_type)." */
+enum LedType {
+    OD_LED_TYPE_RGB           = 0, /**< @doc "RGB LED (3 channels)" */
+    OD_LED_TYPE_SINGLE        = 1, /**< @doc "single LED" */
+    OD_LED_TYPE_RY            = 2, /**< @doc "red/yellow pair" */
+    OD_LED_TYPE_FOUR_SEPARATE = 3  /**< @doc "four separate LEDs" */
+};
+
+/* LedConfig.led_flags @bits LedFlags (bits 5-7 reserved). */
+#define OD_LED_FLAG_LED1_INVERT        (1u << 0) /* @doc "invert LED channel 1 polarity" */
+#define OD_LED_FLAG_LED2_INVERT        (1u << 1) /* @doc "invert LED channel 2 polarity" */
+#define OD_LED_FLAG_LED3_INVERT        (1u << 2) /* @doc "invert LED channel 3 polarity" */
+#define OD_LED_FLAG_LED4_INVERT        (1u << 3) /* @doc "invert LED channel 4 polarity" */
+#define OD_LED_FLAG_BUTTON_PRESS       (1u << 4) /* @doc "short flash on physical button press (incl. button-wake synthetic click); default off" */
+
+/** @struct LedConfig  @packet 0x21  @repeatable max=4
+ *  @doc "LED channel pins + invert flags. Up to 4 instances. 22 bytes. NOTE: the
+ *  15-byte reserved[] tail also carries the runtime LED flash pattern (bytes
+ *  0..11) written by CMD_LED_ACTIVATE 0x0073 -- see struct LedFlashPattern." */
+struct LedConfig {
+    uint8_t instance_number; /**< @doc "0-based LED-block index." */
+    uint8_t led_type;        /**< @enum LedType @doc "LED wiring type." */
+    uint8_t led_1_r;         /**< @doc "channel 1 (red) pin; 0xFF = unused." */
+    uint8_t led_2_g;         /**< @doc "channel 2 (green) pin; 0xFF = unused." */
+    uint8_t led_3_b;         /**< @doc "channel 3 (blue) pin; 0xFF = unused." */
+    uint8_t led_4;           /**< @doc "channel 4 pin (if present); 0xFF = unused." */
+    uint8_t led_flags;       /**< @bits LedFlags @doc "per-channel invert flags (bitfield)." */
+    uint8_t reserved[15];    /**< @reserved @doc "future use; bytes 0..11 hold the runtime LedFlashPattern (see 0x0073). Must be 0 in a fresh config." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct LedConfig) == 22, "LedConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x23  sensor_data
+ * ----------------------------------------------------------------------- */
+
+/** @enum SensorType  @width 2  @doc "Sensor / PMIC type (SensorData.sensor_type)." */
+enum SensorType {
+    OD_SENSOR_TYPE_TEMPERATURE = 1, /**< @doc "generic temperature sensor" */
+    OD_SENSOR_TYPE_HUMIDITY    = 2, /**< @doc "generic humidity sensor" */
+    OD_SENSOR_TYPE_AXP2101     = 3, /**< @doc "AXP2101 power-management IC" */
+    OD_SENSOR_TYPE_SHT40       = 4, /**< @doc "Sensirion SHT40 (I2C); writes 3 LE bytes into MSD dynamic data (21 bits: 0.1C, 0.1% RH)" */
+    OD_SENSOR_TYPE_BQ27220     = 5, /**< @doc "TI BQ27220 fuel gauge (I2C 0x55); voltage in MSD bytes 14-15, one packed dynamic byte (bits 0-6 SOC%, bit7 charging)" */
+    /* 6 is taken by the nRF firmware's nPM1300 PMIC (targets/nordic-zephyr protocol_pending.h). */
+    OD_SENSOR_TYPE_AHT20       = 7, /**< @doc "AHT20 (I2C 0x38); wake-time sample in SHT40-compatible 3-byte MSD format" @since 3.0 */
+    OD_SENSOR_TYPE_PCF8563     = 8  /**< @doc "PCF8563 / BM8563 RTC (I2C 0x51) as the power-off wake source; publishes no MSD data" @since 3.0 */
+};
+
+/** @struct SensorData  @packet 0x23  @repeatable max=4
+ *  @doc "A sensor bound to a data bus, with its MSD publish slot. Up to 4
+ *  instances. 30 bytes." */
+struct SensorData {
+    uint8_t  instance_number;    /**< @doc "0-based sensor-block index." */
+    uint16_t sensor_type;        /**< @enum SensorType @endian le @doc "sensor type." */
+    uint8_t  bus_id;             /**< @doc "data_bus instance this sensor lives on." */
+    uint8_t  i2c_addr_7bit;      /**< @doc "I2C 7-bit address; 0 or 0xFF = per-sensor default (SHT40 0x44, BQ27220 0x55)." @default 0xFF */
+    uint8_t  msd_data_start_byte; /**< @doc "first dynamicreturndata index this sensor publishes into. SHT40 uses 3 bytes (0/0xFF = default 7); BQ27220 uses 1 packed byte (0xFF = do not publish)." @default 0xFF */
+    uint8_t  reserved[24];       /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct SensorData) == 30, "SensorData wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x24  data_bus
+ * ----------------------------------------------------------------------- */
+
+/** @enum BusType  @width 1  @doc "Bus protocol (DataBus.bus_type). Canonical
+ *  replacement for the per-repo OD_BUS_TYPE_I2C macro." */
+enum BusType {
+    OD_BUS_TYPE_I2C = 1, /**< @doc "I2C bus" */
+    OD_BUS_TYPE_SPI = 2  /**< @doc "SPI bus" */
+};
+
+/* DataBus.bus_flags @bits BusFlags -- all bits reserved today (must be 0). */
+
+/* DataBus.pullups / .pulldowns @bits PinBitmap: bit N-1 = pin N (pin_1..pin_7);
+ * bit 7 reserved. See the PinBitmap convention note above BinaryInputs. */
+
+/** @struct DataBus  @packet 0x24  @repeatable max=4
+ *  @doc "A shared I2C/SPI bus definition (pins, speed, pull config) other packets
+ *  reference by instance. Up to 4 instances. 30 bytes." */
+struct DataBus {
+    uint8_t  instance_number; /**< @doc "0-based bus-block index; referenced by SensorData.bus_id, TouchController.bus_id, etc." */
+    uint8_t  bus_type;        /**< @enum BusType @doc "bus protocol." */
+    uint8_t  pin_1;           /**< @doc "pin 1 (SCL for I2C)." */
+    uint8_t  pin_2;           /**< @doc "pin 2 (SDA for I2C)." */
+    uint8_t  pin_3;           /**< @doc "pin 3 (aux / SPI)." */
+    uint8_t  pin_4;           /**< @doc "pin 4 (aux)." */
+    uint8_t  pin_5;           /**< @doc "pin 5 (aux)." */
+    uint8_t  pin_6;           /**< @doc "pin 6 (aux)." */
+    uint8_t  pin_7;           /**< @doc "pin 7 (aux)." */
+    uint32_t bus_speed_hz;    /**< @endian le @unit Hz @doc "bus clock speed." */
+    uint8_t  bus_flags;       /**< @bits BusFlags @doc "bus flags (all reserved today; must be 0)." */
+    uint8_t  pullups;         /**< @bits PinBitmap @doc "internal pull-ups, bit N-1 = pin N (pin_1..pin_7); bit 7 reserved." */
+    uint8_t  pulldowns;       /**< @bits PinBitmap @doc "internal pull-downs, bit N-1 = pin N (pin_1..pin_7); bit 7 reserved." */
+    uint8_t  reserved[14];    /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DataBus) == 30, "DataBus wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x25  binary_inputs
+ * ----------------------------------------------------------------------- *
+ * PinBitmap convention (shared shape): a per-pin bitmap byte where bit index
+ * i maps to pin i+1 (bit 0 = pin 1 ... bit 7 = pin 8). Used by pins_used,
+ * invert, pullups, pulldowns, power_off_flags below and by DataBus pull config.
+ * --------------------------------------------------------------------------- */
+
+/** @enum InputType  @width 1  @doc "Binary input hardware type (BinaryInputs.input_type)." */
+enum InputType {
+    OD_INPUT_TYPE_BUTTON = 1, /**< @doc "momentary button" */
+    OD_INPUT_TYPE_SWITCH = 2  /**< @doc "toggle switch" */
+};
+
+/** @enum InputDisplayAs  @width 1  @doc "How a UI should render the input (BinaryInputs.display_as)." */
+enum InputDisplayAs {
+    OD_INPUT_DISPLAY_AS_BUTTON = 1, /**< @doc "present as a button" */
+    OD_INPUT_DISPLAY_AS_SWITCH = 2  /**< @doc "present as a switch" */
+};
+
+/** @struct BinaryInputs  @packet 0x25  @repeatable max=4
+ *  @doc "Up to 8 button/switch pins per block, with per-pin used/invert/pull and
+ *  long-press power-off config. Up to 4 instances. 30 bytes. Field names are the
+ *  canonical snake_case (config.yaml inputpinN -> input_pin_N, isused -> pins_used;
+ *  firmware called pins reserved_pin_N)." */
+struct BinaryInputs {
+    uint8_t instance_number;        /**< @doc "0-based input-block index." */
+    uint8_t input_type;             /**< @enum InputType @doc "input hardware type." */
+    uint8_t display_as;             /**< @enum InputDisplayAs @doc "how to render the input." */
+    uint8_t input_pin_1;            /**< @doc "input pin 1 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_2;            /**< @doc "input pin 2 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_3;            /**< @doc "input pin 3 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_4;            /**< @doc "input pin 4 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_5;            /**< @doc "input pin 5 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_6;            /**< @doc "input pin 6 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_7;            /**< @doc "input pin 7 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t input_pin_8;            /**< @doc "input pin 8 GPIO; 0xFF = not configured." @default 0xFF */
+    uint8_t pins_used;              /**< @bits PinBitmap @doc "which pins are active (bit N-1 = input_pin_N)." */
+    uint8_t invert;                 /**< @bits PinBitmap @doc "per-pin logic invert (bit N-1 = input_pin_N)." */
+    uint8_t pullups;                /**< @bits PinBitmap @doc "per-pin internal pull-up (bit N-1 = input_pin_N)." */
+    uint8_t pulldowns;              /**< @bits PinBitmap @doc "per-pin internal pull-down (bit N-1 = input_pin_N)." */
+    uint8_t button_data_byte_index; /**< @min 0 @max 10 @doc "dynamicreturndata index this block reports button state into (bounded integer, not an enum). 0xFF = not published." @default 0xFF */
+    uint8_t power_off_flags;        /**< @bits PinBitmap @doc "bit N-1 = input_pin_N triggers long-press power-off (latched devices only; ignored otherwise)." */
+    uint8_t power_off_hold_sec;     /**< @unit s @doc "hold time before power-off; 0 = default 3 s (latched devices only)." */
+    uint8_t reserved[12];           /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct BinaryInputs) == 30, "BinaryInputs wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x26  wifi_config
+ * ----------------------------------------------------------------------- */
+
+/** @enum WifiEncryptionType  @width 1  @doc "WiFi security (WifiConfig.encryption_type)." */
+enum WifiEncryptionType {
+    OD_WIFI_ENC_NONE = 0, /**< @doc "open network (no encryption)" */
+    OD_WIFI_ENC_WEP  = 1, /**< @doc "WEP" */
+    OD_WIFI_ENC_WPA  = 2, /**< @doc "WPA" */
+    OD_WIFI_ENC_WPA2 = 3, /**< @doc "WPA2" */
+    OD_WIFI_ENC_WPA3 = 4  /**< @doc "WPA3" */
+};
+
+/** @struct WifiConfig  @packet 0x26
+ *  @doc "WiFi credentials plus optional upload server host/port. Singleton. 160
+ *  bytes. This header is AHEAD of current firmware: server_host + server_port are
+ *  promoted out of the former reserved[95] (a backward-compatible carve -- the
+ *  bytes were must-be-zero, so old peers still interop; only a peer that writes a
+ *  real port must honor the big-endian server_port). NOTE server_port is the ONE
+ *  big-endian field in this otherwise little-endian struct." */
+struct WifiConfig {
+    uint8_t  ssid[32];        /**< @doc "WiFi SSID, null-terminated and zero-padded to 32 bytes." */
+    uint8_t  password[32];    /**< @doc "WiFi password, null-terminated and zero-padded (empty for open networks)." */
+    uint8_t  encryption_type; /**< @enum WifiEncryptionType @doc "network security type." */
+    uint8_t  server_host[64]; /**< @doc "upload server URL/hostname, null-terminated and zero-padded to 64 bytes; empty = none. Promoted out of reserved[]." @since 1.4 */
+    uint16_t server_port;     /**< @endian be @doc "upload server TCP port, BIG-ENDIAN (the single BE field here). 0 = default/none. Promoted out of reserved[] at former indices 64-65." @since 1.4 */
+    uint8_t  reserved[29];    /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct WifiConfig) == 160, "WifiConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x27  security_config
+ * ----------------------------------------------------------------------- */
+
+/* SecurityConfig.flags @bits SecurityFlags (bits 6-7 reserved). */
+#define OD_SECURITY_FLAG_REWRITE_ALLOWED    (1u << 0) /* @doc "allow unauthenticated config writes while encryption is enabled" */
+#define OD_SECURITY_FLAG_SHOW_KEY_ON_SCREEN (1u << 1) /* @doc "show the encryption key on screen (future feature)" */
+#define OD_SECURITY_FLAG_RESET_PIN_ENABLED  (1u << 2) /* @doc "reset pin enabled (must be set for the reset pin to work)" */
+#define OD_SECURITY_FLAG_RESET_PIN_POLARITY (1u << 3) /* @doc "reset-pin polarity: 0 = LOW triggers, 1 = HIGH triggers" */
+#define OD_SECURITY_FLAG_RESET_PIN_PULLUP   (1u << 4) /* @doc "enable pull-up on the reset pin" */
+#define OD_SECURITY_FLAG_RESET_PIN_PULLDOWN (1u << 5) /* @doc "enable pull-down on the reset pin" */
+
+/** @struct SecurityConfig  @packet 0x27
+ *  @doc "Application-layer encryption master key and reset-pin config. Singleton.
+ *  64 bytes. The AEAD envelope and auth handshake are specified in
+ *  opendisplay_protocol.h; this packet only stores the pre-shared key + policy." */
+struct SecurityConfig {
+    uint8_t  encryption_enabled;      /**< @doc "0 = disabled (all commands work unauthenticated); 1 = enabled (sensitive commands require a session). If encryption_key is all-zero, encryption is off regardless." */
+    uint8_t  encryption_key[16];      /**< @doc "AES-128 master key (16 bytes)." */
+    uint16_t session_timeout_seconds; /**< @endian le @unit s @doc "session timeout; 0 = no timeout (persists until disconnect)." */
+    uint8_t  flags;                   /**< @bits SecurityFlags @doc "security policy flags (bitfield)." */
+    uint8_t  reset_pin;               /**< @doc "reset GPIO; when enabled and triggered, securely erases config and reboots." @default 0xFF */
+    uint8_t  reserved[43];            /**< @reserved @doc "future use; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct SecurityConfig) == 64, "SecurityConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x28  touch_controller
+ * ----------------------------------------------------------------------- */
+
+/** @enum TouchIcType  @width 2  @doc "Touch controller IC (TouchController.touch_ic_type).
+ *  Canonical replacement for the per-repo TOUCH_IC_* macros." */
+enum TouchIcType {
+    OD_TOUCH_IC_NONE  = 0, /**< @doc "disabled / no touch" */
+    OD_TOUCH_IC_GT911 = 1  /**< @doc "Goodix GT911 (I2C)" */
+};
+
+/* TouchController.flags @bits TouchFlags (bits 3-7 reserved). */
+#define OD_TOUCH_FLAG_INVERT_X         (1u << 0) /* @doc "invert X using panel width" */
+#define OD_TOUCH_FLAG_INVERT_Y         (1u << 1) /* @doc "invert Y using panel height" */
+#define OD_TOUCH_FLAG_SWAP_XY          (1u << 2) /* @doc "swap X and Y before invert/clip" */
+
+/** @struct TouchController  @packet 0x28  @repeatable max=4
+ *  @doc "Capacitive touch controller on I2C (e.g. GT911). Publishes the first
+ *  contact (5 bytes) into MSD dynamic data. Up to 4 instances. 32 bytes." */
+struct TouchController {
+    uint8_t  instance_number;      /**< @doc "0-based touch-block index." */
+    uint16_t touch_ic_type;        /**< @enum TouchIcType @endian le @doc "touch controller IC." */
+    uint8_t  bus_id;               /**< @doc "data_bus instance for I2C; 0xFF means bus 0." */
+    uint8_t  i2c_addr_7bit;        /**< @doc "I2C 7-bit address (GT911 0x5D or 0x14); 0 or 0xFF = auto-detect." @default 0xFF */
+    uint8_t  int_pin;              /**< @doc "interrupt GPIO (active low); 0xFF = poll only." @default 0xFF */
+    uint8_t  rst_pin;              /**< @doc "reset GPIO; 0xFF = skip hardware reset (probe only)." @default 0xFF */
+    uint8_t  display_instance;     /**< @doc "DisplayConfig index used for coordinate clip / invert reference." */
+    uint8_t  flags;                /**< @bits TouchFlags @doc "coordinate mapping flags (bitfield)." */
+    uint8_t  poll_interval_ms;     /**< @unit ms @doc "minimum time between polls; 0 = default 25 ms." */
+    uint8_t  touch_data_start_byte; /**< @min 0 @max 6 @doc "start index in dynamicreturndata for the 5-byte touch block (avoid overlap with binary_inputs)." */
+    uint8_t  enable_pin;           /**< @doc "optional touch-panel power-enable GPIO (active high); 0 or 0xFF = unused." @default 0xFF */
+    uint8_t  reserved[20];         /**< @reserved @doc "future use (e.g. GT911 register profile); must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct TouchController) == 32, "TouchController wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x29  buzzer  (config.yaml packet name: passive_buzzer)
+ * ----------------------------------------------------------------------- */
+
+/* BuzzerConfig.flags @bits BuzzerFlags (bits 2-7 reserved). */
+#define OD_BUZZER_FLAG_ENABLE_ACTIVE_HIGH (1u << 0) /* @doc "enable pin is active-high when set; otherwise active-low" */
+#define OD_BUZZER_FLAG_BUTTON_PRESS       (1u << 1) /* @doc "short chirp on physical button press (incl. button-wake synthetic click); default off" */
+
+/** @struct BuzzerConfig  @packet 0x29  @repeatable max=4
+ *  @doc "Buzzer (passive piezo, PWM-driven). Up to 4 instances. 32 bytes. The tone
+ *  PATTERN is not stored here -- it is carried variable-length by CMD_BUZZER
+ *  0x0077 ([instance][outer_repeats][n_patterns] then per-pattern n_steps x
+ *  (freq:u8, duration:u8)); that payload stays prose-documented in
+ *  opendisplay_protocol.h (it is variable-length, so not modeled as a struct)." */
+struct BuzzerConfig {
+    uint8_t instance_number; /**< @doc "0-based buzzer-block index." */
+    uint8_t drive_pin;       /**< @doc "GPIO driving the PWM / square wave into the buzzer (via transistor). Pin encoding is target-defined (e.g. nRF54 (port<<4)|pin)." */
+    uint8_t enable_pin;      /**< @doc "optional enable (e.g. FET); 0xFF = unused." @default 0xFF */
+    uint8_t flags;           /**< @bits BuzzerFlags @doc "buzzer flags (bitfield)." */
+    uint8_t duty_percent;    /**< @min 1 @max 100 @doc "PWM duty cycle; 0 = default 50." */
+    uint8_t reserved[27];    /**< @reserved @doc "future use (incl. internal frequency/time scaling); must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct BuzzerConfig) == 32, "BuzzerConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x2A  nfc_config
+ * ----------------------------------------------------------------------- */
+
+/* NfcConfig.nfc_ic_type binds to opendisplay_protocol.h's OD_NFC_IC_* MACROS
+ * (OD_NFC_IC_AUTO 0, OD_NFC_IC_TNB132M 1) -- NOT re-enumerated here: an enum
+ * member of the same spelling would be rewritten by the macro and fail to
+ * compile. See the LANGUAGE / LINKAGE RULE in the banner. */
+
+/** @enum NfcFieldDetectMode  @width 1  @doc "How NFC field presence is sensed (NfcConfig.field_detect_mode)." */
+enum NfcFieldDetectMode {
+    OD_NFC_FIELD_DETECT_DISABLED   = 0, /**< @doc "field-detect logic disabled" */
+    OD_NFC_FIELD_DETECT_GPIO_LEVEL = 1, /**< @doc "GPIO level sampled / polled" */
+    OD_NFC_FIELD_DETECT_IRQ_LATCHED = 2  /**< @doc "interrupt-latched (reserved for future use)" */
+};
+
+/* NfcConfig.flags @bits NfcFlags (bits 1-7 reserved). */
+#define OD_NFC_FLAG_ENABLED            (1u << 0) /* @doc "must be set to enable NFC init (no fallback init if clear)" */
+
+/** @struct NfcConfig  @packet 0x2A  @repeatable max=2
+ *  @doc "NFC IC selection, data bus, and optional field-detect GPIO that maps a
+ *  button-like state into the BLE advertisement. Up to 2 instances. 32 bytes." */
+struct NfcConfig {
+    uint8_t instance_number;        /**< @doc "0-based NFC-block index." */
+    uint8_t nfc_ic_type;            /**< @enum OD_NFC_IC (see opendisplay_protocol.h: OD_NFC_IC_AUTO 0, OD_NFC_IC_TNB132M 1) @doc "NFC IC / flow selector." */
+    uint8_t bus_instance;           /**< @doc "data_bus instance (I2C) to use." */
+    uint8_t flags;                  /**< @bits NfcFlags @doc "NFC flags (bitfield); bit0 must be set to enable." */
+    uint8_t field_detect_pin;       /**< @doc "field-detect input GPIO; 0xFF = disabled." @default 0xFF */
+    uint8_t field_detect_mode;      /**< @enum NfcFieldDetectMode @doc "field-detect sensing mode." */
+    uint8_t field_detect_active;    /**< @enum ActiveLevel @doc "active level of field_detect_pin." */
+    uint8_t field_detect_debounce_ms; /**< @unit ms @doc "debounce time; 0 = no debounce." */
+    uint8_t power_pin;              /**< @doc "NFC rail enable pin; 0xFF = use data_bus pin_3 if present, else none." @default 0xFF */
+    uint8_t power_active;           /**< @enum ActiveLevel @doc "power-pin polarity (reserved in current firmware)." */
+    uint8_t power_on_delay_ms;      /**< @unit ms @doc "delay after enabling power before NFC access." */
+    uint8_t power_off_delay_ms;     /**< @unit ms @doc "delay before power-off/park (reserved in current firmware)." */
+    uint8_t adv_button_byte_index;  /**< @min 0 @max 10 @doc "dynamicreturndata index for the field-detect button-like state." */
+    uint8_t adv_button_button_id;   /**< @doc "3-bit button id (stored in the lower bits) for the advertised state." */
+    uint8_t reserved_pin_1;         /**< @reserved @doc "spare pin; must be 0." */
+    uint8_t reserved_pin_2;         /**< @reserved @doc "spare pin; must be 0." */
+    uint8_t reserved[16];           /**< @reserved @doc "future NFC IC-specific extensions; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct NfcConfig) == 32, "NfcConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x2B  flash_config
+ * ----------------------------------------------------------------------- */
+
+/** @enum FlashIcType  @width 1  @doc "External-flash IC type (FlashConfig.flash_ic_type)." */
+enum FlashIcType {
+    OD_FLASH_IC_AUTO = 0 /**< @doc "generic SPI-flash deep-sleep command flow" */
+};
+
+/* FlashConfig.flags @bits FlashFlags (bits 1-7 reserved). */
+#define OD_FLASH_FLAG_ENABLED          (1u << 0) /* @doc "must be set to enable flash pin config / deep-sleep sequencing" */
+
+/** @struct FlashConfig  @packet 0x2B  @repeatable max=2
+ *  @doc "External SPI flash deep-sleep pin sequencing. Up to 2 instances. 32
+ *  bytes. Ignored when the enabled flag is clear." */
+struct FlashConfig {
+    uint8_t instance_number;   /**< @doc "0-based flash-block index." */
+    uint8_t flash_ic_type;     /**< @enum FlashIcType @doc "flash IC type (reserved for future)." */
+    uint8_t bus_instance;      /**< @doc "reserved for future bus binding." */
+    uint8_t flags;             /**< @bits FlashFlags @doc "flash flags (bitfield); bit0 must be set to enable." */
+    uint8_t mosi_pin;          /**< @doc "SPI MOSI pin (encoding target-defined, e.g. 0xPN)." */
+    uint8_t sck_pin;           /**< @doc "SPI SCK pin." */
+    uint8_t cs_pin;            /**< @doc "SPI CS pin." */
+    uint8_t power_pin;         /**< @doc "optional power-enable pin (reserved in current firmware)." @default 0xFF */
+    uint8_t power_active;      /**< @enum ActiveLevel @doc "power-pin polarity (reserved in current firmware)." */
+    uint8_t power_on_delay_ms; /**< @unit ms @doc "power-on delay before first command (reserved)." */
+    uint8_t power_off_delay_ms; /**< @unit ms @doc "power-off delay after command (reserved)." */
+    uint8_t mode;              /**< @doc "flash mode selector (reserved for future)." */
+    uint8_t reserved[20];      /**< @reserved @doc "future flash extensions; must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct FlashConfig) == 32, "FlashConfig wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x2C  data_extended
+ * ----------------------------------------------------------------------- */
+
+/** @struct DataExtended  @packet 0x2C
+ *  @doc "Extended device-identity strings. Singleton. 288 bytes = 9 fixed 32-byte
+ *  fields. Each field is a null-terminated, zero-padded UTF-8 string; default is
+ *  the empty string (all zeros)." */
+struct DataExtended {
+    uint8_t manufacturer_name[32]; /**< @doc "manufacturer name (32-byte UTF-8, null-terminated, zero-padded)." */
+    uint8_t model_name[32];        /**< @doc "model name." */
+    uint8_t serial_number[32];     /**< @doc "serial number." */
+    uint8_t friendly_name[32];     /**< @doc "human-friendly device name." */
+    uint8_t device_location[32];   /**< @doc "physical / logical location." */
+    uint8_t device_id[32];         /**< @doc "unique device identifier string." */
+    uint8_t custom_string_1[32];   /**< @doc "user-defined string 1." */
+    uint8_t custom_string_2[32];   /**< @doc "user-defined string 2." */
+    uint8_t custom_string_3[32];   /**< @doc "user-defined string 3." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DataExtended) == 288, "DataExtended wire size");
+
+/* -----------------------------------------------------------------------
+ * 0x2D  findmy_config  (the LAST legacy-range packet; 0x00-0x7F is frozen)
+ * ----------------------------------------------------------------------- */
+
+/** @enum FindMyCurve  @width 1  @doc "FMDN EID curve selector (FindMyConfig.fmdn_curve)." */
+enum FindMyCurve {
+    OD_FINDMY_CURVE_SECP160R1 = 0, /**< @doc "20-byte static EID (network G / legacy AD). Uses advertisement_key." */
+    OD_FINDMY_CURVE_SECP256R1 = 1  /**< @doc "32-byte rotating EID on SECP256R1 (extended AD)." */
+};
+
+/* FindMyConfig.flags @bits FindMyFlags (bits 2-7 reserved). */
+#define OD_FINDMY_FLAG_FMDN_ENABLE   (1u << 0) /* @doc "enable network G (FMDN) advertising." */
+#define OD_FINDMY_FLAG_NET_A_ENABLE  (1u << 1) /* @doc "enable network A (legacy offline-finding) advertising." */
+
+/** @struct FindMyConfig  @packet 0x2D  @since 1.5
+ *  @doc "Proximity-network provisioning blob. Singleton. 128 bytes. For network G use
+ *  fmdn_curve=secp160r1 with advertisement_key=generate_eid(eik,0) (static beacon_counter=0).
+ *  SECP256R1 rotates from eik+time_base on-device.
+ *  For network A set net_a_enable and net_a_adv_key to the 28-byte P-224 advertisement public key X.
+ *  net_a_time_base stays 0 (static mode, no on-device rotation). Reserved bytes must be zero.
+ *  Folded back from the Firmware_Silabs vendored superset (parity restore): this packet
+ *  shipped before it had a canonical home, which is exactly the interop hole the frozen
+ *  legacy range + 0x80+ length rule now prevent -- a reader that did not know 0x2D could
+ *  not skip it and lost everything behind it." */
+struct FindMyConfig {
+    uint8_t flags;                   /**< @bits FindMyFlags @doc "enable flags; bits 2-7 reserved." */
+    uint8_t fmdn_k;                  /**< @doc "FMDN rotation-period exponent K (typically 10)." */
+    uint8_t fmdn_curve;              /**< @enum FindMyCurve @doc "FMDN EID curve selector." */
+    uint8_t reserved0[5];            /**< @reserved @doc "must be 0; pads the control header to 8 bytes." */
+    uint8_t eik[32];                 /**< @doc "Network G ephemeral identity key (32 bytes)." */
+    uint8_t net_a_adv_key[28];       /**< @doc "Network A 28-byte advertisement public key X (not the private key)." */
+    uint32_t time_base_unix;         /**< @endian le @unit s @doc "Unix epoch for SECP256R1 rotation; unused for static SECP160 (write 0)." */
+    uint32_t net_a_time_base;        /**< @endian le @unit s @doc "unused in static network A mode; write 0." */
+    uint8_t advertisement_key[20];   /**< @doc "Static 20-byte SECP160 EID for network G (generate_eid(eik,0)); zero when unused." */
+    uint8_t reserved1[32];           /**< @reserved @doc "must be 0; reserved for future extensions." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct FindMyConfig) == 128, "FindMyConfig wire size");
+
+/* ==========================================================================
+ * 0xAE-0xB1  PANEL DRIVE DATA  (length-prefixed range, SinglePacketHeaderEx)
+ * ==========================================================================
+ * The panel drive recipe as CONFIG data, replacing the firmware's compiled-in
+ * panel table (vendored bb_epaper): every command byte, every waveform, the
+ * BUSY policy and the colour code map arrive in these packets. The firmware
+ * knows how to EXECUTE a sequence; the config knows WHAT the sequence is. A
+ * device with none of these packets cannot drive its panel at all.
+ * Design review: Firmware_Silabs docs/DRIVER_MIGRATION.md (Rev 2).
+ *
+ * These are VARIABLE-BODY packets: each is a fixed HEAD struct (below) followed
+ * by ONE documented tail; the total body length travels in
+ * SinglePacketHeaderEx.length. Packet ids 0x2E-0x31 were burned by pre-release
+ * lab builds carrying fixed-size drafts of these packets; RESERVED, never reuse.
+ *
+ * DRIVE SEQUENCE ENCODING -- the contract everything else hangs off.
+ * A mode's whole recipe for one pass is a byte string of steps:
+ *     [len][cmd][data...]        len counts cmd+data, len >= 1
+ * A step always has a command byte, so len = 0x00 is impossible as a step and
+ * is free as the ESCAPE prefix: [0x00][esc][args...] with esc = DriveSeqEscape
+ * (argument shapes documented per value below). One sequence is the whole
+ * recipe for a pass -- registers, waveform upload, image, power-on, refresh --
+ * so waveform placement is simply the POSITION of the LUT escape in the
+ * sequence, and the executor needs no per-panel opinions.
+ * Escapes 0x80-0xFF are RESERVED and length-carrying ([0x00][esc][len][args]),
+ * so a future OPTIONAL escape can be skipped by executors that know this rule.
+ * An executor MUST pre-validate a sequence and refuse it wholesale -- NACK
+ * OD_ERR_DRIVE_SEQ_UNSUPPORTED, BEFORE any panel I/O -- if it contains an
+ * escape it does not know or has not implemented. No partial execution.
+ * Executor status (doc-only): Firmware_Unified's efr32bg22-slc target
+ * implements CS_SELECT (0x08), READ_SCRATCH (0x09) and WRITE_SCRATCH (0x0A)
+ * -- HARDWARE-UNVERIFIED. Other executors may still refuse them; the START-time
+ * OD_ERR_DRIVE_SEQ_UNSUPPORTED NACK is the portable signal, so a host needs no
+ * per-target escape table.
+ * ========================================================================== */
+
+/** @enum DriveSeqEscape  @width 1
+ *  @doc "Escape codes inside a drive sequence ([0x00][esc][args...], see the
+ *  section banner). Argument byte counts are fixed per value (0x00-0x7F);
+ *  0x80+ reserved escapes carry an explicit length byte instead." */
+enum DriveSeqEscape {
+    OD_SEQ_ESC_END           = 0x00, /**< @doc "end of sequence (no args)." */
+    OD_SEQ_ESC_BUSY          = 0x01, /**< @doc "wait for BUSY to clear per display_panel busy policy (no args)." */
+    OD_SEQ_ESC_SUBST         = 0x02, /**< @doc "args [n][off,val]*n: next step is sent with n (offset,value) byte substitutions applied -- waveform-header patching." */
+    OD_SEQ_ESC_IMAGE         = 0x03, /**< @doc "stream the WHOLE image frame here (no args; executor pauses for 0x71/0x81 data). Equivalent to IMAGE_SLICE part 0 of 1." */
+    OD_SEQ_ESC_LUT           = 0x04, /**< @doc "stream the WHOLE waveform slot of the current pass here (no args). Slot selected by display_mode.lut_slot[pass]." */
+    OD_SEQ_ESC_DELAY         = 0x05, /**< @doc "args [lo][hi]: wait N ms (u16 LE). NOT a BUSY substitute -- exists for panels whose BUSY is unusable and for fixed settles." */
+    OD_SEQ_ESC_SET_PIN       = 0x06, /**< @doc "args [pin_ref][level]: set a config-referenced pin (DriveSeqPinRef; NEVER a raw GPIO number, so sequences stay board-independent). level 0/1 drive low/high; 2 = release to input/Hi-Z (bidirectional data line during 3-wire read-back). Covers BS bus-select (high for BWRY glass, toggled around UC8159 temperature read-back) and the waveform-EEPROM CS." @since 1.6 */
+    OD_SEQ_ESC_IMAGE_SLICE   = 0x07, /**< @doc "args [part][of]: stream slice `part` (0-based) of `of` equal slices of the frame. Slices divide the UNCOMPRESSED frame, so they compose with a compressed transfer. For split panels: dual-CS Spectra 6 (CS_SELECT then slice 1 of 2) and single-CS dual-controller glass addressed via cmd|0x80 (0x24+slice 0 of 2, 0xA4+slice 1 of 2)." @since 1.6 */
+    OD_SEQ_ESC_CS_SELECT     = 0x08, /**< @doc "args [cs_sel]: route following steps to chip-select n (0 = cs_pin, 1 = cs_pin_2). Sticky until changed; every sequence starts at 0." @since 1.6 */
+    OD_SEQ_ESC_READ_SCRATCH  = 0x09, /**< @doc "args [pin_ref][len]: clock `len` bytes (<= 16) into the scratch buffer, sampling `pin_ref` (DriveSeqPinRef) as the data-in line -- explicit because the read source varies (dc_pin doubles as MISO on some boards; a waveform EEPROM has its own MISO on an aux pin). Scratch is 16 bytes, zeroed at sequence start." @since 1.6 */
+    OD_SEQ_ESC_WRITE_SCRATCH = 0x0A, /**< @doc "args [cmd][off][len]: send command byte `cmd` followed by scratch[off..off+len) as data. With READ_SCRATCH this expresses e.g. the UC8159 panel-EEPROM flow (SET_PIN eeprom-CS, READ_SCRATCH PLL/VCOM, WRITE_SCRATCH into registers)." @since 1.6 */
+    OD_SEQ_ESC_LUT_SLICE     = 0x0B, /**< @doc "args [off:2 LE][len:2 LE]: stream bytes [off, off+len) of the current pass's waveform slot. For controllers whose waveform spans several registers (UC81xx 0x20-0x24): the slot stores the concatenation and the sequence sends one slice per register, so ONE slot per pass still suffices." @since 1.6 */
+    OD_SEQ_ESC_WINDOW        = 0x0C, /**< @doc "args [n][(kind,val)*n]: one step of n bytes (cmd first, n 1..32), each a literal (kind 0) or a geometry byte (kind 1; val bits 2..0 x0/x1/y0/y1/W-1/H-1/w/h, bit3 divide by 8, bit4 mirror, bit5 high byte) of the update window (the partial rectangle, else the whole panel)." @since 3.0 */
+    OD_SEQ_ESC_FILL          = 0x0D  /**< @doc "args [cmd][value][flags]: cmd, then a plane of `value`; flags bits 1..0 bpp (1/2/4; 3 refused), bit 7 the window instead of the whole panel." @since 3.0 */
+};
+
+/** @enum DriveSeqPinRef  @width 1
+ *  @doc "Pin references used by SET_PIN / READ_SCRATCH escape args. Values
+ *  index pins the config already names (DisplayConfig 0x20), NEVER raw GPIO
+ *  numbers -- a panels.yaml sequence must not depend on board wiring." */
+enum DriveSeqPinRef {
+    OD_SEQ_PINREF_AUX_1 = 0x00, /**< @doc "DisplayConfig.aux_pin_1" */
+    OD_SEQ_PINREF_AUX_2 = 0x01, /**< @doc "DisplayConfig.aux_pin_2" */
+    OD_SEQ_PINREF_AUX_3 = 0x02, /**< @doc "DisplayConfig.aux_pin_3" */
+    OD_SEQ_PINREF_AUX_4 = 0x03, /**< @doc "DisplayConfig.aux_pin_4" */
+    OD_SEQ_PINREF_AUX_5 = 0x04, /**< @doc "DisplayConfig.aux_pin_5" */
+    OD_SEQ_PINREF_AUX_6 = 0x05, /**< @doc "DisplayConfig.aux_pin_6" */
+    OD_SEQ_PINREF_RESET = 0x10, /**< @doc "DisplayConfig.reset_pin" */
+    OD_SEQ_PINREF_DC    = 0x11, /**< @doc "DisplayConfig.dc_pin (doubles as MISO on some boards)" */
+    OD_SEQ_PINREF_CS    = 0x12, /**< @doc "DisplayConfig.cs_pin" */
+    OD_SEQ_PINREF_CS_2  = 0x13, /**< @doc "DisplayConfig.cs_pin_2" */
+    OD_SEQ_PINREF_DATA  = 0x14, /**< @doc "DisplayConfig.data_pin (MOSI)" */
+    OD_SEQ_PINREF_CLK   = 0x15  /**< @doc "DisplayConfig.clk_pin (SCLK)" */
+};
+
+/** @enum DriveTempPolicy  @width 1
+ *  @doc "display_mode.temp_policy: what the DEVICE does when its temperature
+ *  estimate falls outside [temp_min_c, temp_max_c] at DRIVE_WRITE_START. The
+ *  device enforces -- it is the thing with a sensor; the 0x0085 ACK reports the
+ *  mode actually used plus temp_c (opendisplay_protocol.h 2.3)." */
+enum DriveTempPolicy {
+    OD_DRIVE_TEMP_ADVISORY   = 0, /**< @doc "run the requested mode regardless (window is documentation)." */
+    OD_DRIVE_TEMP_SUBSTITUTE = 1, /**< @doc "substitute the declared mode whose window covers the current temperature; ties break to the LOWEST mode_index. The ACK's mode byte reports the substitution; hosts MUST read it back." */
+    OD_DRIVE_TEMP_REJECT     = 2  /**< @doc "NACK with OD_ERR_DRIVE_TEMP_RANGE; nothing is driven." */
+};
+
+/* DisplayPanelHead.panel_flags @bits DisplayPanelFlags (bits 2-7 reserved). */
+#define OD_PANEL_FLAG_BUSY_USABLE   (1u << 0) /* @doc "the BUSY line can be polled; else use busy_fixed_delay_ms blind waits." */
+#define OD_PANEL_FLAG_LUT_SUPPORTED (1u << 1) /* @doc "panel honours a custom waveform (display_lut slots are meaningful)." */
+
+/* DisplayCalibrationHead.cal_flags @bits DriveCalFlags (bits 1-7 reserved). */
+#define OD_DRIVE_CAL_FLAG_MEASURED  (1u << 0) /* @doc "lab[] values were photometrically measured on THIS unit; 0 = borrowed/nominal placeholder." */
+
+/** @struct DisplayModeHead  @packet 0xAE  @repeatable max=32  @since 1.6
+ *  @doc "HEAD of a display_mode packet: one drive mode of one display. Body =
+ *  this 37-byte head + seq[seq_len] (the encoded drive sequence; see the
+ *  section banner for the step/escape grammar). Body length = 37 + seq_len,
+ *  carried in SinglePacketHeaderEx.length." */
+struct DisplayModeHead {
+    uint8_t  instance_number; /**< @doc "display instance this mode belongs to (DisplayConfig.instance_number)." */
+    uint8_t  mode_index;      /**< @doc "mode id named by CMD_DRIVE_WRITE_START's mode byte; unique per display." */
+    uint8_t  mode_name[12];   /**< @doc "human-readable mode name, NUL-padded ASCII (e.g. 'full', 'fast', '16colour')." */
+    uint8_t  color_scheme;    /**< @enum ColorScheme @doc "what this mode RENDERS (e.g. BWRY16 for a multi-pass 16-colour mode, GRAY16 for a grey mode on a BWR panel); 0xFF = inherit the panel's DisplayConfig.color_scheme. This is the one legitimate home for mode-level schemes like BWRY16 that must never enter 0x20." */
+    uint8_t  passes;          /**< @min 1 @max 8 @doc "how many frames one transfer streams; the device re-runs the sequence per pass." */
+    uint8_t  temp_min_c;      /**< @doc "lower temperature bound, SIGNED int8 two's complement, degrees C." */
+    uint8_t  temp_max_c;      /**< @doc "upper temperature bound, SIGNED int8 two's complement, degrees C." */
+    uint8_t  temp_policy;     /**< @enum DriveTempPolicy @doc "device-enforced out-of-window behaviour." */
+    uint8_t  lut_slot[8];     /**< @doc "waveform slot per pass (display_lut.lut_slot); 0xFF = no custom waveform for that pass. Entries past `passes` are 0xFF." */
+    uint8_t  vsn1[8];         /**< @doc "per-pass waveform byte-3 patch value; 0 = none. Entries past `passes` are 0." */
+    uint16_t seq_len;         /**< @endian le @doc "byte length of the seq[] tail that follows this head." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DisplayModeHead) == 37, "DisplayModeHead wire size");
+
+/** @struct DisplayLutHead  @packet 0xAF  @repeatable max=8  @since 1.6
+ *  @doc "HEAD of a display_lut packet: one waveform slot AT ITS REAL SIZE
+ *  (an SSD16xx waveform is ~70-110 B; UC8151-class ~535 B -- no fixed-body
+ *  padding). Body = this 4-byte head + data[SinglePacketHeaderEx.length - 4].
+ *  A slot failing crc16 is treated as ABSENT, not as garbage: a corrupt or
+ *  half-written waveform degrades to 'no custom waveform' rather than driving
+ *  the panel with noise. Stream the waveform at the length the panel's
+ *  register holds -- NEVER trim trailing idle bytes (fewer bytes than the
+ *  register leaves stale data in the tail)." */
+struct DisplayLutHead {
+    uint8_t  instance_number; /**< @doc "display instance this slot belongs to." */
+    uint8_t  lut_slot;        /**< @doc "slot id referenced by display_mode.lut_slot[]." */
+    uint16_t crc16;           /**< @endian le @doc "CRC16-CCITT (poly OD_CONFIG_CRC_POLY, init OD_CONFIG_CRC_INIT) over the data[] tail." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DisplayLutHead) == 4, "DisplayLutHead wire size");
+
+/** @struct DisplayCalibrationHead  @packet 0xB0  @repeatable max=32  @since 1.6
+ *  @doc "HEAD of a display_calibration packet: the renderable palette of one
+ *  multi-pass mode. Body = this 4-byte head + entry_count repetitions of
+ *  DisplayCalibrationEntry (8 B each). HOST-ONLY: the device skips this packet;
+ *  it exists so a host image pipeline can quantise against real measured
+ *  colour. Encoding and measurement live in ONE packet deliberately: a
+ *  measurement whose codes are unknown cannot be reproduced, and codes with no
+ *  measurement cannot be chosen between." */
+struct DisplayCalibrationHead {
+    uint8_t  instance_number; /**< @doc "display instance." */
+    uint8_t  mode_index;      /**< @doc "display_mode this palette belongs to." */
+    uint8_t  cal_flags;       /**< @bits DriveCalFlags @doc "bit0 = measured on this unit." */
+    uint8_t  entry_count;     /**< @min 1 @max 32 @doc "number of DisplayCalibrationEntry records following (e.g. 17 for 16 greys + red)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DisplayCalibrationHead) == 4, "DisplayCalibrationHead wire size");
+
+/** @struct DisplayCalibrationEntry  @since 1.6
+ *  @doc "One palette entry: the per-pass panel codes that produce a colour,
+ *  plus its measured CIELAB. codes are PANEL codes, already past code_map --
+ *  do NOT apply display_panel.code_map to them (doing so swaps yellow and red
+ *  on BWRY glass)." */
+struct DisplayCalibrationEntry {
+    uint16_t codes;           /**< @endian le @doc "packed 2-bit panel codes, pass p in bits [2p+1:2p] (LSB-first); 16 bits cover the 8-pass maximum." */
+    uint16_t lab_l;           /**< @endian le @doc "CIELAB L* x100, SIGNED int16 two's complement." */
+    uint16_t lab_a;           /**< @endian le @doc "CIELAB a* x100, SIGNED int16 two's complement." */
+    uint16_t lab_b;           /**< @endian le @doc "CIELAB b* x100, SIGNED int16 two's complement." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DisplayCalibrationEntry) == 8, "DisplayCalibrationEntry wire size");
+
+/** @struct DisplayPanelHead  @packet 0xB1  @repeatable max=4  @since 1.6
+ *  @doc "HEAD of a display_panel packet: per-panel drive properties that were
+ *  NEVER on the wire before -- 0x20 carries busy_pin but says nothing about
+ *  whether that pin can be BELIEVED (the 4.2 inch GDEM042F52 asserts busy from
+ *  power-up and never releases after refresh; polling it stalls forever).
+ *  Without this packet a config-driven driver is unimplementable. Body = this
+ *  13-byte head + sleep_seq[sleep_seq_len] (same step/escape encoding as
+ *  display_mode.seq)." */
+struct DisplayPanelHead {
+    uint8_t  instance_number;     /**< @doc "display instance this describes." */
+    uint8_t  panel_flags;         /**< @bits DisplayPanelFlags @doc "BUSY trust + waveform support." */
+    uint8_t  busy_idle_level;     /**< @min 0 @max 1 @doc "pin level meaning not-busy (UC81xx idles high, SSD16xx low)." */
+    uint16_t busy_timeout_ms;     /**< @endian le @unit ms @doc "poll ceiling when BUSY is usable." */
+    uint16_t busy_fixed_delay_ms; /**< @endian le @unit ms @doc "blind wait when it is not (OD_PANEL_FLAG_BUSY_USABLE clear)." */
+    uint8_t  code_map[4];         /**< @doc "logical colour index -> panel 2-bit code, for the 4-colour path. NEVER apply to display_calibration codes (already panel codes)." */
+    uint8_t  mode_count;          /**< @doc "how many display_mode packets belong to this display." */
+    uint8_t  sleep_seq_len;       /**< @doc "byte length of the sleep_seq[] tail; 0 = no sleep sequence." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct DisplayPanelHead) == 13, "DisplayPanelHead wire size");
+
+/* ==========================================================================
+ * 0xB2  ACTION TABLE  (length-prefixed range, SinglePacketHeaderEx)
+ * ==========================================================================
+ * Trigger -> ordered effects, run by the DEVICE with no host connected (flash
+ * an LED on a button press, show a stored image when the temperature leaves a
+ * window). Not a VM: no jumps, loops or conditionals, so a table's worst-case
+ * run time is step_count x 2.55 s by inspection.
+ *
+ * BODY = a concatenation of entries, each ActionEntryHead (6 B) followed by
+ * step_count ActionStep records (4 B). Multi-byte fields little-endian. Total
+ * body length travels in SinglePacketHeaderEx.length.
+ *
+ * RULES
+ *  1. SINGLETON. A config carries AT MOST ONE 0xB2. The device resolves the
+ *     packet by FIRST match, so a second 0xB2 is legal on the wire, silent,
+ *     and useless: the device keeps running the first and CMD_ACTION_INFO
+ *     (0x004C) describes only that one. A client that replaces the table MUST
+ *     remove the existing 0xB2 and write exactly one -- never append. (A
+ *     host that round-trips unknown 0x80+ packets verbatim and then adds a new
+ *     table hits exactly this.)
+ *  2. STRUCTURAL FAULTS STOP THE WALK. An entry whose entry_len < 6, runs past
+ *     the body, differs from 6 + 4*step_count, or whose step_count exceeds
+ *     OD_ACTION_STEPS_MAX is REJECTED, and NO entry after it is read (one bad
+ *     entry_len desynchronises everything that follows). Fewer than 6 bytes
+ *     left at the end are ignored. Writers MUST emit entry_len = 6 + 4*steps.
+ *  3. UNKNOWN IS NOT BROKEN. An entry whose trigger or any step's effect this
+ *     build does not know -- or cannot perform here (e.g. BUZZER on a board
+ *     without one, TEMP_* with no temperature source) -- is ACCEPTED, kept,
+ *     and counted INACTIVE: it never runs on this build, but a firmware that
+ *     learns it starts running it with no config rewrite.
+ *  4. MATCHING. An event (trigger, arg) starts the FIRST entry that is ENABLED,
+ *     has that trigger, and whose trigger_arg is 0 ("any") or EQUALS arg.
+ *     Equality, not a mask test. An entry with step_count 0 never runs.
+ *  5. ONE AT A TIME. An event arriving while a sequence runs is DROPPED, not
+ *     queued. Events are recorded at the edge and started from the main loop.
+ *  6. The ENABLED bit is read LIVE before every step: a config write that
+ *     clears it stops a sequence already running.
+ *  7. Each step runs its effect, then waits delay_cs x 10 ms. Every step yields
+ *     to the main loop, even with delay 0.
+ *  8. TEMP_ENTER / TEMP_EXIT are EDGES, not levels; the first temperature
+ *     sample after boot or a config write only sets the baseline.
+ * Implementation notes (Firmware_Unified efr32bg22-slc, the only executor):
+ * temperature is the DIE sensor polled every 2 s with NO hysteresis, so a
+ * reading dithering at a window edge fires repeatedly; and the inside/outside
+ * edge state is shared by all temperature entries, so only one window per
+ * table behaves correctly. Both are recorded firmware defects, not contract.
+ * ========================================================================== */
+
+/** @enum ActionTrigger  @width 1
+ *  @doc "ActionEntryHead.trigger: the event that starts an entry, and what its
+ *  trigger_arg means for it." */
+enum ActionTrigger {
+    OD_ACTION_TRIG_NONE         = 0, /**< @doc "never fires; such an entry counts as INACTIVE." */
+    OD_ACTION_TRIG_BOOT         = 1, /**< @doc "once, after the stack is up. arg unused (0)." */
+    OD_ACTION_TRIG_BUTTON_PRESS = 2, /**< @doc "physical button press edge. arg = (1 << button_id), button_id as reported in the MSD button byte (instance*8 + input bit, 0..7); 0 = any button. Matched by EQUALITY: one bit per entry, not a multi-button mask." */
+    OD_ACTION_TRIG_BUTTON_LONG  = 3, /**< @doc "button held. arg = hold time in centiseconds. RESERVED: no firmware emits this event yet." */
+    OD_ACTION_TRIG_NFC_FIELD    = 4, /**< @doc "NFC field-detect rising edge. arg unused (0)." */
+    OD_ACTION_TRIG_HOST         = 5, /**< @doc "fired by CMD_ACTION_FIRE (0x004D). arg = host_id (low byte only; the opcode carries one byte), 0 = any." */
+    OD_ACTION_TRIG_TEMP_ENTER   = 6, /**< @doc "temperature moved from outside to inside a window. arg low byte = min C, high byte = max C, both SIGNED int8, inclusive." */
+    OD_ACTION_TRIG_TEMP_EXIT    = 7  /**< @doc "temperature moved from inside to outside the window; arg as TEMP_ENTER." */
+};
+
+/** @enum ActionEffect  @width 1
+ *  @doc "ActionStep.effect: what one step does before its delay." */
+enum ActionEffect {
+    OD_ACTION_EFF_NONE         = 0, /**< @doc "nothing; the step is a pure delay. arg0/arg1 unused." */
+    OD_ACTION_EFF_LED          = 1, /**< @doc "one short flash on LED instance 0. arg0 = colour/channel byte (LedFlashPattern.color1 encoding), arg1 = brightness 1..16 (0 -> 1, >16 -> 16)." */
+    OD_ACTION_EFF_LED_STOP     = 2, /**< @doc "stop LED instance 0. args unused." */
+    OD_ACTION_EFF_DISPLAY_SLOT = 3, /**< @doc "queue image-store slot arg0 for display, as CMD_FLASH_DISPLAY (0x004B) does; silently skipped if that request would NACK. arg1 unused." */
+    OD_ACTION_EFF_BUZZER       = 4  /**< @doc "play melody id arg0. INACTIVE on a board without a buzzer." */
+};
+
+/* Step ceiling per entry: entry_len is therefore at most 6 + 8*4 = 38 bytes. */
+#define OD_ACTION_STEPS_MAX            8u   /* @doc "maximum ActionEntryHead.step_count; more is a structural fault" */
+
+/* ActionEntryHead.flags @bits ActionEntryFlags (bits 1-7 reserved, write 0). */
+#define OD_ACTION_FLAG_ENABLED      (1u << 0) /* @doc "entry may fire; read live before every step, so clearing it stops a running sequence." */
+
+/** @struct ActionEntryHead  @packet 0xB2  @since 1.6
+ *  @doc "HEAD of one action-table entry. The 0xB2 body is a concatenation of
+ *  entries, each this 6-byte head + step_count x ActionStep. entry_len MUST be
+ *  6 + 4*step_count; see the 0xB2 section for the walk, match and singleton
+ *  rules." */
+struct ActionEntryHead {
+    uint8_t  entry_len;   /**< @doc "total bytes of this entry INCLUDING this head: 6 + 4*step_count (max 38)." */
+    uint8_t  trigger;     /**< @enum ActionTrigger @doc "event that starts this entry." */
+    uint16_t trigger_arg; /**< @endian le @doc "trigger-specific argument (see ActionTrigger); 0 = any for button/host." */
+    uint8_t  flags;       /**< @bits ActionEntryFlags @doc "bit0 = enabled." */
+    uint8_t  step_count;  /**< @max 8 @doc "number of ActionStep records following (<= OD_ACTION_STEPS_MAX)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct ActionEntryHead) == 6, "ActionEntryHead wire size");
+
+/** @struct ActionStep  @since 1.6
+ *  @doc "One step of an action entry: run `effect`, then wait delay_cs
+ *  centiseconds (so one step waits at most 2.55 s)." */
+struct ActionStep {
+    uint8_t effect;   /**< @enum ActionEffect @doc "what this step does." */
+    uint8_t arg0;     /**< @doc "first effect argument (see ActionEffect)." */
+    uint8_t arg1;     /**< @doc "second effect argument (see ActionEffect)." */
+    uint8_t delay_cs; /**< @unit cs @doc "wait AFTER the effect, x10 ms (0..2550 ms)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct ActionStep) == 4, "ActionStep wire size");
+
+/* ==========================================================================
+ * SECTION 5 -- MESSAGE PAYLOAD STRUCTS  (fixed-size opcode payloads)
+ * ==========================================================================
+ * The single machine-readable home for the fixed-layout bodies of the opcodes
+ * defined in opendisplay_protocol.h. protocol.h's @request/@response blocks are
+ * the narrative; these structs are the byte offsets (one home per layout ->
+ * they cannot drift apart). Variable-length / streaming payloads (pipe DATA
+ * chunks, the 0x0077 buzzer pattern list) are NOT modeled here -- they stay
+ * prose in protocol.h.
+ *
+ * IMPORTANT endianness split: PIPE (0x80/0x81) fields are LITTLE-endian; the
+ * 0x76 PartialWriteStartHeader geometry is BIG-endian. The two carry the SAME
+ * geometry fields in opposite byte orders -- see PipePartialExt vs
+ * PartialWriteStartHeader.
+ * ========================================================================== */
+
+/* LedFlashPattern.mode_brightness low nibble = mode; 1 = flash (0 = off/idle).
+ * The pipe flags (PipeStartRequest.flags) bind to opendisplay_protocol.h's
+ * PIPE_FLAG_COMPRESSED / PIPE_FLAG_PARTIAL macros -- not redefined here. */
+
+/** @struct LedFlashPattern  @message CMD_LED_ACTIVATE  @endian le
+ *  @doc "12-byte LED flash program carried in CMD_LED_ACTIVATE 0x0073 after the
+ *  led_instance byte; firmware persists it into LedConfig.reserved[0..11]. Odd
+ *  nibble packing is OEPL-compatible -- do not 'fix' it. Three color/loop stages
+ *  (1,2,3) each contribute a color byte, a packed loop-delay/count byte, and an
+ *  inter-loop delay byte." */
+struct LedFlashPattern {
+    uint8_t mode_brightness;    /**< @bits @doc "low nibble = mode (1 = flash, 0 = off); high nibble = brightness minus 1 (0..15 -> brightness 1..16)." */
+    uint8_t color1;             /**< @doc "stage-1 color/channel byte." */
+    uint8_t loop1_delay_count;  /**< @bits @doc "high nibble = stage-1 loop delay (x100 ms); low nibble = stage-1 loop count." */
+    uint8_t inter_loop_delay1;  /**< @unit ms @doc "stage-1 inter-loop delay (x100 ms); 0 = none." */
+    uint8_t color2;             /**< @doc "stage-2 color/channel byte." */
+    uint8_t loop2_delay_count;  /**< @bits @doc "high nibble = stage-2 loop delay (x100 ms); low nibble = stage-2 loop count." */
+    uint8_t inter_loop_delay2;  /**< @unit ms @doc "stage-2 inter-loop delay (x100 ms); 0 = none." */
+    uint8_t color3;             /**< @doc "stage-3 color/channel byte." */
+    uint8_t loop3_delay_count;  /**< @bits @doc "high nibble = stage-3 loop delay (x100 ms); low nibble = stage-3 loop count." */
+    uint8_t inter_loop_delay3;  /**< @unit ms @doc "stage-3 inter-loop delay (x100 ms); 0 = none." */
+    uint8_t group_repeats;      /**< @doc "group repeat count minus 1 (value 255 = repeat forever)." */
+    uint8_t reserved;           /**< @reserved @doc "must be 0." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct LedFlashPattern) == 12, "LedFlashPattern wire size");
+
+/** @struct PipeStartRequest  @message CMD_PIPE_WRITE_START  @endian le
+ *  @doc "10-byte PIPE (0x0080) START header that follows the 2 opcode bytes
+ *  (host->device). If flags bit1 (PIPE_FLAG_PARTIAL) is set, a 12-byte
+ *  PipePartialExt is appended (22 bytes total after the opcode). NOTE: the plan
+ *  inventory listed this as 8 bytes, but the field list and protocol.h's
+ *  '10-byte header (22 when partial)' both give 10 -- 10 is correct." */
+struct PipeStartRequest {
+    uint8_t  version;          /**< @doc "PIPE protocol version = PIPE_VERSION (1)." */
+    uint8_t  flags;            /**< @bits PIPE_FLAG (see opendisplay_protocol.h: bit0 PIPE_FLAG_COMPRESSED, bit1 PIPE_FLAG_PARTIAL)." */
+    uint8_t  req_window;       /**< @min 1 @max 32 @doc "requested sliding-window size (frames)." */
+    uint8_t  req_ack_every;    /**< @min 1 @max 32 @doc "requested ACK cadence (frames per SACK)." */
+    uint16_t client_max_frame; /**< @endian le @doc "largest on-wire frame the client will send." */
+    uint32_t total_size;       /**< @endian le @doc "decompressed byte total to transfer (partial: plane_size x 2)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct PipeStartRequest) == 10, "PipeStartRequest wire size");
+
+/** @struct PipePartialExt  @message CMD_PIPE_WRITE_START  @endian le
+ *  @doc "12-byte partial-region extension appended to PipeStartRequest when
+ *  PIPE_FLAG_PARTIAL is set. LITTLE-endian twin of the 0x76 PartialWriteStartHeader
+ *  geometry (which is big-endian)." */
+struct PipePartialExt {
+    uint32_t old_etag; /**< @endian le @doc "etag currently displayed; must match or the START is NACKed." */
+    uint16_t x;        /**< @endian le @unit px @doc "region left edge." */
+    uint16_t y;        /**< @endian le @unit px @doc "region top edge." */
+    uint16_t w;        /**< @endian le @unit px @doc "region width." */
+    uint16_t h;        /**< @endian le @unit px @doc "region height." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct PipePartialExt) == 12, "PipePartialExt wire size");
+
+/** @struct PipeStartResponse  @message CMD_PIPE_WRITE_START  @endian le
+ *  @doc "6-byte PIPE START ACK data (device->host): the device echoes its
+ *  negotiated maxima (min-rule applies against the client's request)." */
+struct PipeStartResponse {
+    uint8_t  version;       /**< @doc "PIPE protocol version = PIPE_VERSION (1)." */
+    uint8_t  max_window;    /**< @doc "device-granted maximum window size." */
+    uint8_t  max_ack_every; /**< @doc "device-granted maximum ACK cadence." */
+    uint16_t max_frame;     /**< @endian le @doc "device-granted maximum frame size." */
+    uint8_t  resp_flags;    /**< @bits @doc "bit0 = selective-repeat supported; bit1 = partial accepted." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct PipeStartResponse) == 6, "PipeStartResponse wire size");
+
+/** @struct PipeSack  @message CMD_PIPE_WRITE_DATA  @endian le
+ *  @doc "5-byte selective-ACK data in the PIPE 0x0081 ACK frame (device->host).
+ *  highest_seen is implicitly acked; ack_mask bit i (LSB first) acks chunk
+ *  (highest_seen - 1 - i)." */
+struct PipeSack {
+    uint8_t  highest_seen; /**< @doc "highest received seq (mod 256), implicitly acked." */
+    uint32_t ack_mask;     /**< @endian le @doc "selective-ACK bitmask below highest_seen (bit i = seq highest_seen-1-i)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct PipeSack) == 5, "PipeSack wire size");
+
+/** @struct PartialWriteStartHeader  @message CMD_PARTIAL_WRITE_START  @endian be
+ *  @doc "17-byte header for CMD_PARTIAL_WRITE_START 0x0076, following the 2 opcode
+ *  bytes (host->device). ENTIRELY BIG-ENDIAN -- the showcase for the per-message
+ *  endianness split: the PIPE 0x80 path carries the same geometry LITTLE-endian
+ *  (see PipePartialExt). x and width must be multiples of 8; old_etag must equal
+ *  the currently displayed etag." */
+struct PartialWriteStartHeader {
+    uint8_t  flags;    /**< @doc "partial-write flags (see protocol.h 0x76 @request)." */
+    uint32_t old_etag; /**< @endian be @doc "etag currently displayed; must match." */
+    uint32_t new_etag; /**< @endian be @doc "etag to store after this write." */
+    uint16_t x;        /**< @endian be @unit px @doc "region left edge (multiple of 8)." */
+    uint16_t y;        /**< @endian be @unit px @doc "region top edge." */
+    uint16_t width;    /**< @endian be @unit px @doc "region width (multiple of 8)." */
+    uint16_t height;   /**< @endian be @unit px @doc "region height." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct PartialWriteStartHeader) == 17, "PartialWriteStartHeader wire size");
+
+/** @struct AuthChallenge  @message CMD_AUTHENTICATE  @endian le
+ *  @doc "21-byte CMD_AUTHENTICATE 0x0050 step-1 response DATA (device->host),
+ *  after the [status][echo] framing: the device's nonce + id the client signs.
+ *  This handshake is ALWAYS plaintext (bootstraps the session)." */
+struct AuthChallenge {
+    uint8_t  status;          /**< @doc "auth status = AUTH_STATUS_CHALLENGE (0x00) on success (see protocol.h)." */
+    uint8_t  server_nonce[16]; /**< @doc "device nonce; part of the CMAC input." */
+    uint32_t device_id;       /**< @endian le @doc "device id; part of the CMAC input." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct AuthChallenge) == 21, "AuthChallenge wire size");
+
+/** @struct AuthProof  @message CMD_AUTHENTICATE
+ *  @doc "32-byte CMD_AUTHENTICATE 0x0050 step-2 request payload (host->device):
+ *  the client nonce and the AES-CMAC over (server_nonce || client_nonce ||
+ *  device_id)." */
+struct AuthProof {
+    uint8_t client_nonce[16]; /**< @doc "client nonce; part of the CMAC input." */
+    uint8_t mac[16];          /**< @doc "AES-CMAC(master_key, server_nonce || client_nonce || device_id)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct AuthProof) == 32, "AuthProof wire size");
+
+/** @enum FlashSlotState  @width 1
+ *  @doc "FlashSlotRecord.state. A BIT LATTICE, not labels: NOR programming
+ *  only clears bits, so each state is reachable from the previous one without
+ *  an erase (FREE 0xFF -> WRITING 0xFE -> VALID 0xFC -> BAD 0x00). Any other
+ *  value is not displayable." */
+enum FlashSlotState {
+    OD_FLASH_SLOT_BAD     = 0x00, /**< @doc "marked unusable (reserved; current firmware never writes it)." */
+    OD_FLASH_SLOT_VALID   = 0xFC, /**< @doc "holds a complete frame; digest is its CRC-32." */
+    OD_FLASH_SLOT_WRITING = 0xFE, /**< @doc "a write started and never finished (torn or aborted); reusable as free." */
+    OD_FLASH_SLOT_FREE    = 0xFF  /**< @doc "erased / never written." */
+};
+
+/** @struct FlashInfoResponse  @message CMD_FLASH_INFO  @endian le
+ *  @doc "10-byte CMD_FLASH_INFO 0x0047 response DATA (device->host), after the
+ *  [status][echo] framing. When mounted = 0 the other fields are not
+ *  meaningful." */
+struct FlashInfoResponse {
+    uint8_t  mounted;     /**< @min 0 @max 1 @doc "1 = image store usable." */
+    uint8_t  slot_count;  /**< @max 32 @doc "number of slots (<= OD_FLASH_MAX_SLOTS)." */
+    uint32_t slot_stride; /**< @endian le @doc "bytes per slot, a whole number of 4 KiB sectors, INCLUDING the 32-byte slot header (max frame = slot_stride - 32)." */
+    uint32_t capacity;    /**< @endian le @doc "flash part size in bytes." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct FlashInfoResponse) == 10, "FlashInfoResponse wire size");
+
+/** @struct FlashSlotRecord  @message CMD_FLASH_LIST  @endian le
+ *  @doc "One 6-byte record of the CMD_FLASH_LIST 0x0048 response, which is
+ *  [count:1] then count of these (device->host)." */
+struct FlashSlotRecord {
+    uint8_t  index;  /**< @doc "slot index (0-based)." */
+    uint8_t  state;  /**< @enum FlashSlotState @doc "slot state." */
+    uint32_t digest; /**< @endian le @doc "CRC-32/ISO-HDLC (zlib.crc32) of the stored uncompressed frame; meaningful only when state = VALID (FREE reports 0, WRITING 0xFFFFFFFF)." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct FlashSlotRecord) == 6, "FlashSlotRecord wire size");
+
+/** @struct ActionInfoResponse  @message CMD_ACTION_INFO
+ *  @doc "8-byte CMD_ACTION_INFO 0x004C response DATA (device->host): load
+ *  statistics of the FIRST 0xB2 action table plus runner observability. All
+ *  counters reset on boot and on every config write. A 2.4 reader of the
+ *  first 7 bytes is unaffected by `tables`." */
+struct ActionInfoResponse {
+    uint8_t entries;      /**< @doc "structurally valid entries loaded (= active + inactive)." */
+    uint8_t active;       /**< @doc "entries this build can run." */
+    uint8_t inactive;     /**< @doc "valid entries with an unknown or unperformable trigger/effect." */
+    uint8_t rejected;     /**< @doc "malformed entries skipped; each drops only itself and the walk continues." */
+    uint8_t last_trigger; /**< @enum ActionTrigger @doc "trigger that last started a sequence; 0 = none yet." */
+    uint8_t fire_count;   /**< @doc "sequences started, mod 256." */
+    uint8_t last_temp_c;  /**< @unit C @doc "latest temperature sample, SIGNED int8 two's complement; 0 before the first sample." */
+    uint8_t tables;       /**< @doc "number of 0xB2 packets in the config; only the first runs (> 1 means a host appended instead of replacing)." @since 3.0 */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct ActionInfoResponse) == 8, "ActionInfoResponse wire size");
+
+/* ==========================================================================
+ * SECTION 6 -- BLE MANUFACTURER-SPECIFIC ADVERTISEMENT (MSD)
+ * ==========================================================================
+ * The 16-byte manufacturer-specific data record broadcast in BLE advertisements
+ * AND returned by CMD_READ_MSD 0x0044. The 11-byte `dynamic` area holds
+ * config-driven slots (button / touch / SHT40 / BQ27220) at the indices those
+ * config packets specify (SensorData.msd_data_start_byte,
+ * BinaryInputs.button_data_byte_index, TouchController.touch_data_start_byte).
+ * Verified against OD App Models/AdvertisementData.swift.
+ * ========================================================================== */
+
+/* MsdAdvertisement.status @bits MsdStatusBits. bit0 is the 9th (MSB) bit of the
+ * 10-bit battery voltage; bits 4-7 are a free-running main-loop nibble counter. */
+#define OD_MSD_STATUS_BATTERY_VOLTAGE_BIT8 (1u << 0) /* @doc "high bit of the 10-bit battery voltage (units of 10 mV); combine with battery_voltage_low" */
+#define OD_MSD_STATUS_REBOOT_FLAG          (1u << 1) /* @doc "device rebooted since last read" */
+#define OD_MSD_STATUS_CONNECTION_REQUESTED (1u << 2) /* @doc "device is requesting a connection" */
+#define OD_MSD_STATUS_ENCRYPTION_ENABLED   (1u << 3) /* @doc "application-layer encryption active (encryption_enabled and non-zero master key)" */
+#define OD_MSD_STATUS_RESERVED_3           (1u << 3) /* @deprecated @doc "legacy name for OD_MSD_STATUS_ENCRYPTION_ENABLED (same bit)" */
+#define OD_MSD_STATUS_MAIN_LOOP_COUNTER_SHIFT 4u     /* @doc "bits 4-7: free-running main-loop nibble counter (liveness)" */
+#define OD_MSD_STATUS_MAIN_LOOP_COUNTER_MASK  0xF0u  /* @doc "mask for the bits 4-7 main-loop counter nibble" */
+
+/** @struct MsdAdvertisement  @message CMD_READ_MSD  @endian le
+ *  @doc "16-byte OpenDisplay manufacturer-specific data. Broadcast in BLE
+ *  advertisements and returned by CMD_READ_MSD 0x0044 (device->host). Battery
+ *  voltage is 10 bits (10 mV units): the low 8 bits are battery_voltage_low, the
+ *  9th bit is status bit0; the 10th is implied 0 / reserved by firmware." */
+struct MsdAdvertisement {
+    uint16_t company_id;         /**< @endian le @doc "BLE company identifier." */
+    uint8_t  dynamic[11];        /**< @doc "config-driven dynamic area: button/touch/SHT40/BQ27220 slots at indices set by the relevant config packets." */
+    uint8_t  chip_temperature;   /**< @unit C @doc "MCU chip temperature (signed degrees C, firmware-defined offset)." */
+    uint8_t  battery_voltage_low; /**< @unit 10mV @doc "low 8 bits of the 10-bit battery voltage (10 mV units); high bit in status bit0." */
+    uint8_t  status;             /**< @bits MsdStatusBits @doc "status flags + battery voltage MSB + main-loop counter nibble." */
+} __attribute__((packed));
+OD_STATIC_ASSERT(sizeof(struct MsdAdvertisement) == 16, "MsdAdvertisement wire size");
+
+#endif /* OPENDISPLAY_STRUCTS_H */

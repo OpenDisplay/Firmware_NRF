@@ -15,6 +15,7 @@ typedef struct {
     bool initialized;            // Whether this button is initialized
     uint8_t pin_offset;          // Pin offset within instance (0-7) for faster ISR lookup
     bool inverted;               // Inverted flag for this pin (cached for ISR)
+    uint8_t pull;                // nrf_gpio_pin_pull_t of the pin (for the System OFF wake)
 } ButtonState;
 
 #define MAX_BUTTONS 32  // Up to 4 instances * 8 pins = 32 buttons max
@@ -22,5 +23,8 @@ typedef struct {
 void button_init(void);
 
 void process_button_events(void);
+
+/* Before System OFF: every configured button becomes a wake source at its pressed level. */
+void button_sleep_arm(void);
 
 #endif // BUTTON_CONTROL_H__

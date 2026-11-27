@@ -73,7 +73,7 @@ make full
 This creates `_build/EPD-nRF52-full.hex` which can be flashed directly to a blank chip.
 For this bootloader flow, `make full` also generates:
 - `_build/EPD-nRF52-settings.hex` (bootloader settings page)
-- `_build/EPD-nRF52-ota.zip` (signed OTA package)
+- `_build/EPD-nRF52-ota.zip` (signed OTA package, only with `make full GENERATE_OTA=1`)
 
 `make full` requires:
 - `nrfutil` available and working
