@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import struct
 import sys
 import time
@@ -39,8 +40,13 @@ DFU_SVC = "0000fe59-0000-1000-8000-00805f9b34fb"
 DFU_CP = "8ec90001-f315-4f60-9fb8-838830daea50"
 DFU_PKT = "8ec90002-f315-4f60-9fb8-838830daea50"
 HERE = Path(__file__).resolve().parent
-PRESETS = next((p for p in (HERE / "drive_presets_nrf52811.json",
-                             HERE.parent / "presets" / "drive_presets_nrf52811.json") if p.exists()),
+# The presets live in Firmware_Unified (panels/generated/drive_presets_nrf52811.json): OD_PRESETS
+# names the file, OD_UNIFIED a checkout; else a copy beside this script or a sibling checkout.
+_UNIFIED = Path(os.environ.get("OD_UNIFIED", HERE.parent.parent / "Firmware_Unified"))
+PRESETS = next((p for p in (Path(os.environ["OD_PRESETS"]) if os.environ.get("OD_PRESETS") else None,
+                             HERE / "drive_presets_nrf52811.json",
+                             _UNIFIED / "panels" / "generated" / "drive_presets_nrf52811.json")
+                if p is not None and p.exists()),
                HERE / "drive_presets_nrf52811.json")
 
 # Legacy (0x00-0x7F) packet body sizes, from od_config_tlv_body_size() of this build.

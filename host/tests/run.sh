@@ -11,9 +11,10 @@ OUT=$REPO/host/build
 KEY=${1:-0xE011}
 mkdir -p "$OUT"
 
-sh "$REPO/host/equiv/build_capture.sh" "$OUT" >/dev/null
+sh "$REPO/host/equiv/build_replay.sh" "$OUT" >/dev/null
+. "$REPO/host/presets.sh"
 
-python3 - "$REPO/presets/drive_presets_nrf52811.json" "$KEY" "$OUT/preset_blob.h" <<'EOF'
+python3 - "$PRESETS" "$KEY" "$OUT/preset_blob.h" <<'EOF'
 import json, sys
 d = json.load(open(sys.argv[1]))["panels"][sys.argv[2]]
 b = bytes.fromhex(d["framed_hex"])
@@ -57,7 +58,7 @@ else
 fi
 
 # The upload's panel bus against od_epd_replay for the same packets (mode 0, then sleep).
-python3 - "$REPO/presets/drive_presets_nrf52811.json" "$KEY" "$OUT/bus.log" "$OUT/od_epd_replay" <<'EOF'
+python3 - "$PRESETS" "$KEY" "$OUT/bus.log" "$OUT/od_epd_replay" <<'EOF'
 import json, subprocess, sys, tempfile
 d = json.load(open(sys.argv[1]))["panels"][sys.argv[2]]
 def norm(lines):

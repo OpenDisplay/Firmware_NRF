@@ -30,25 +30,21 @@ This is a fork of [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) for co
 Firmware 3.0 has no built-in panel drivers. A panel is driven by the drive packets in its config
 (0xB1 panel, 0xAE refresh mode), run by the shared OpenDisplay drive chain in `od/`.
 
-`presets/drive_presets_nrf52811.json` holds the presets for this target. Only presets that were
-checked on a real panel ship (status `glass`):
+The presets for this target live in
+[Firmware_Unified](https://github.com/OpenDisplay/Firmware_Unified), not here:
 
-| Key | Panel |
-|---|---|
-| 0xE002 | 4.2in SSD BWR 400x300 |
-| 0xE007 | 7.5in UC8179 BWR 800x480 (sold as 7.4in) |
-| 0xE00F | 2.9in UC8151 BWR 168x384 |
-| 0xE011 | 2.9in SSD BWR 168x384 |
-| 0xE013 | 1.6in SSD BWR 200x200 |
-| 0xE019 | 2.7in UC8151 BWR 200x300 |
-| 0xE01B | 4.3in UCVAR43 BWR 152x522 |
-| 0xE01D | 1.3in SSD BWR 144x200 |
-| 0xE01F | 2.2in Lite SSD BWR 128x250 |
-| 0xE020 | 4.2in SSD BWY 400x300 |
-| 0xE101 | 2.2in BWR 160x296 |
+- `panels/nrf52811/presets.yaml` is the source (drive steps, notes, 0xB0 palette units);
+- `panels/generated/drive_presets_nrf52811.json` is generated from it by
+  `panels/tools/gen_nrf52811.py`, and every Firmware_Unified release carries it as
+  `drive_presets_nrf52811.json`;
+- `panels/nrf52811/README.md` says what the presets are and how to add one.
 
-`tools/gen_presets.py` regenerates the file. `host/tests/run.sh KEY` checks that a preset's bus
-traffic matches its replay.
+Only presets checked on a real panel ship (status `glass`). Their ids are provisional
+(0xE0xx / 0xE1xx).
+
+`host/tests/run.sh KEY` checks that a preset's bus traffic on this firmware matches its replay.
+It reads the presets from a Firmware_Unified checkout: set `OD_UNIFIED=<checkout>` (default: a
+`Firmware_Unified` folder next to this repo) or `OD_PRESETS=<file>`.
 
 ## Building
 
