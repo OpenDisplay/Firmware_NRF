@@ -32,6 +32,9 @@ jobs:
   compile:
     runs-on: ubuntu-24.04
     container: archlinux:base
+    defaults:
+      run:
+        shell: bash
     outputs:
       args: ${{ steps.version.outputs.args }}
       version: ${{ steps.version.outputs.version }}
@@ -40,7 +43,7 @@ jobs:
 
       - name: Install the pinned ARM toolchain (GCC 16.2.0, newlib 4.6.0, binutils 2.47)
         run: |
-          pacman -Sy --noconfirm --needed make libmpc libisl zstd zlib
+          pacman -Sy --noconfirm --needed make which libmpc libisl zstd zlib
           cd "$RUNNER_TEMP"
           for p in arm-none-eabi-binutils/arm-none-eabi-binutils-2.47-1-x86_64 \
                    arm-none-eabi-gcc/arm-none-eabi-gcc-16.2.0-1-x86_64 \
