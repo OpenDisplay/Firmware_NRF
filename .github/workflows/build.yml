@@ -1,0 +1,183 @@
+name: Build and test
+
+# Builds the firmware the way a release does (application, softdevice image, full image with the
+# bootloader, signed OTA zip), checks the flash headroom, and runs the host tests against the
+# drive presets in Firmware_Unified. Runs on every push and pull request, and is called by
+# release.yml with the release's version.
+#
+# THE ARM COMPILER IS PINNED. The application fills its 57,344 B flash region to within a few
+# hundred bytes, and the result depends on the compiler: GCC 16.2 fits (the build the fleet was
+# tested with), xPack GCC 15.2.1 overflows by about 1.3 kB and Ubuntu's 13.2 by about 2.2 kB. So
+# `compile` runs in an Arch Linux container with exact package files from the Arch Linux Archive
+# (checked by SHA-256), and `package` merges and signs that application without recompiling it.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: "MAJOR.MINOR.PATCH to build (default: the Makefile's)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  ALA: https://archive.archlinux.org/packages/a
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    container: archlinux:base
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      args: ${{ steps.version.outputs.args }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned ARM toolchain (GCC 16.2.0, newlib 4.6.0, binutils 2.47)
+        run: |
+          pacman -Sy --noconfirm --needed make which libmpc libisl zstd zlib
+          cd "$RUNNER_TEMP"
+          for p in arm-none-eabi-binutils/arm-none-eabi-binutils-2.47-1-x86_64 \
+                   arm-none-eabi-gcc/arm-none-eabi-gcc-16.2.0-1-x86_64 \
+                   arm-none-eabi-newlib/arm-none-eabi-newlib-4.6.0.20260123-1-any; do
+            curl -sSfLO "$ALA/$p.pkg.tar.zst"
+          done
+          sha256sum -c - <<'EOF'
+          b494d4e01cc35c4bcef8522c28d32a9b086460f1037eaaa7a046f2c378d0d7d1  arm-none-eabi-binutils-2.47-1-x86_64.pkg.tar.zst
+          b3fca2319f030bafe17873b4cbcaef3d643043a99f18317cc2793bcaf563b702  arm-none-eabi-gcc-16.2.0-1-x86_64.pkg.tar.zst
+          52a414b03ef9a641b0d1e2009e093998954cbe95196cfac7649e47f97e23eda3  arm-none-eabi-newlib-4.6.0.20260123-1-any.pkg.tar.zst
+          EOF
+          pacman -U --noconfirm ./arm-none-eabi-*.pkg.tar.zst
+          arm-none-eabi-gcc --version | head -1
+
+      - name: Version
+        id: version
+        run: |
+          V="${{ inputs.version }}"
+          V="${V#v}"
+          if [ -z "$V" ]; then
+            V=$(make -s -C build-nrf52 --no-print-directory \
+                --eval='pv: ; @echo $(MAJOR_VERSION).$(MINOR_VERSION).$(PATCH_VERSION)' pv)
+          fi
+          case "$V" in
+            *[!0-9.]*|"") echo "version '$V' is not MAJOR.MINOR[.PATCH]"; exit 1 ;;
+          esac
+          MAJOR=$(echo "$V" | cut -d. -f1)
+          MINOR=$(echo "$V" | cut -d. -f2); MINOR=${MINOR:-0}
+          PATCH=$(echo "$V" | cut -d. -f3); PATCH=${PATCH:-0}
+          echo "args=MAJOR_VERSION=$MAJOR MINOR_VERSION=$MINOR PATCH_VERSION=$PATCH" >> "$GITHUB_OUTPUT"
+          echo "version=$MAJOR.$MINOR.$PATCH" >> "$GITHUB_OUTPUT"
+          echo "building $MAJOR.$MINOR.$PATCH"
+
+      - name: Compile the application
+        working-directory: build-nrf52
+        run: |
+          make -j"$(nproc)" app ${{ steps.version.outputs.args }} SHA="${GITHUB_SHA::7}"
+
+      - name: Flash headroom
+        working-directory: build-nrf52
+        run: |
+          arm-none-eabi-size _build/EPD-nRF52.out
+          used=$(arm-none-eabi-size _build/EPD-nRF52.out | awk 'NR==2{print $1+$2}')
+          echo "flash used (text+data): $used of 57344 B, $((57344 - used)) B free"
+          echo "### Flash: $used of 57344 B used, $((57344 - used)) B free (GCC $(arm-none-eabi-gcc -dumpversion))" >> "$GITHUB_STEP_SUMMARY"
+          [ "$used" -le 57344 ]
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: |
+            build-nrf52/_build/EPD-nRF52.hex
+            build-nrf52/_build/EPD-nRF52.out
+          if-no-files-found: error
+
+  package:
+    needs: compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: build-nrf52/_build
+
+      - name: Cache nRF Command Line Tools
+        id: cache-nrf
+        uses: actions/cache@v4
+        with:
+          path: nrf-command-line-tools_10.23.1_amd64.deb
+          key: ${{ runner.os }}-nrf-tools-10.23.1
+
+      - name: Download nRF Command Line Tools
+        if: steps.cache-nrf.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/10-23-1/nrf-command-line-tools_10.23.1_amd64.deb
+
+      - name: Install nRF Command Line Tools (mergehex) and clang
+        run: |
+          sudo apt-get update
+          # gcc-arm-none-eabi only satisfies the Makefile's toolchain check: the application is
+          # never recompiled here (make -o below, and its SHA-256 is checked after packaging).
+          sudo apt-get install -y --no-install-recommends clang gcc-arm-none-eabi binutils-arm-none-eabi
+          sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb || sudo apt-get install -f -y
+          sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install nrfutil
+        run: python3 -m pip install nrfutil
+
+      # -o: use the compiled application as it is; never rebuild it with another compiler.
+      - name: Softdevice image, full image and OTA zip
+        working-directory: build-nrf52
+        run: |
+          before=$(sha256sum _build/EPD-nRF52.hex)
+          make -o _build/EPD-nRF52.hex -o _build/EPD-nRF52.out sd ${{ needs.compile.outputs.args }}
+          make -o _build/EPD-nRF52.hex -o _build/EPD-nRF52.out full ${{ needs.compile.outputs.args }} \
+            GENERATE_OTA=1 KEY_FILE=../tools/priv.pem
+          [ "$(sha256sum _build/EPD-nRF52.hex)" = "$before" ] || { echo "the application was rebuilt"; exit 1; }
+
+      - name: Collect artefacts
+        run: |
+          V=${{ needs.compile.outputs.version }}
+          mkdir -p out
+          cp build-nrf52/_build/EPD-nRF52.hex      out/EPD-nRF52-v$V-app.hex
+          cp build-nrf52/_build/EPD-nRF52-sd.hex   out/EPD-nRF52-v$V-sd.hex
+          cp build-nrf52/_build/EPD-nRF52-full.hex out/EPD-nRF52-v$V-full.hex
+          cp build-nrf52/_build/EPD-nRF52-ota.zip  out/EPD-nRF52-v$V-ota.zip
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/
+          if-no-files-found: error
+
+      - name: Firmware_Unified (drive presets)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenDisplay/Firmware_Unified
+          path: unified
+          sparse-checkout: panels/generated
+
+      - name: Host tests, every preset
+        env:
+          OD_UNIFIED: ${{ github.workspace }}/unified
+        run: |
+          keys=$(python3 -c "import json; print(' '.join(json.load(open('unified/panels/generated/drive_presets_nrf52811.json'))['panels']))")
+          for k in $keys; do
+            echo "::group::$k"
+            sh host/tests/run.sh "$k"
+            echo "::endgroup::"
+          done
