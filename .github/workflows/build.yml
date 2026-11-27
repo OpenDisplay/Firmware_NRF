@@ -1,0 +1,126 @@
+name: Build and test
+
+# Builds the firmware the way a release does (application, softdevice image, full image with the
+# bootloader, signed OTA zip), checks the flash headroom, and runs the host tests against the
+# drive presets in Firmware_Unified. Runs on every push and pull request, and is called by
+# release.yml with the release's version.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: "MAJOR.MINOR.PATCH to build (default: the Makefile's)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi clang
+          arm-none-eabi-gcc --version | head -1
+
+      - name: Cache nRF Command Line Tools
+        id: cache-nrf
+        uses: actions/cache@v4
+        with:
+          path: nrf-command-line-tools_10.23.1_amd64.deb
+          key: ${{ runner.os }}-nrf-tools-10.23.1
+
+      - name: Download nRF Command Line Tools
+        if: steps.cache-nrf.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/10-23-1/nrf-command-line-tools_10.23.1_amd64.deb
+
+      - name: Install nRF Command Line Tools (mergehex)
+        run: |
+          sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb || sudo apt-get install -f -y
+          sudo dpkg -i nrf-command-line-tools_10.23.1_amd64.deb
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install nrfutil
+        run: python3 -m pip install nrfutil
+
+      - name: Version
+        id: version
+        run: |
+          V="${{ inputs.version }}"
+          V="${V#v}"
+          if [ -z "$V" ]; then
+            V=$(make -s -C build-nrf52 --no-print-directory \
+                --eval='pv: ; @echo $(MAJOR_VERSION).$(MINOR_VERSION).$(PATCH_VERSION)' pv)
+          fi
+          case "$V" in
+            *[!0-9.]*|"") echo "version '$V' is not MAJOR.MINOR[.PATCH]"; exit 1 ;;
+          esac
+          MAJOR=$(echo "$V" | cut -d. -f1)
+          MINOR=$(echo "$V" | cut -d. -f2); MINOR=${MINOR:-0}
+          PATCH=$(echo "$V" | cut -d. -f3); PATCH=${PATCH:-0}
+          echo "args=MAJOR_VERSION=$MAJOR MINOR_VERSION=$MINOR PATCH_VERSION=$PATCH" >> "$GITHUB_OUTPUT"
+          echo "version=$MAJOR.$MINOR.$PATCH" >> "$GITHUB_OUTPUT"
+          echo "building $MAJOR.$MINOR.$PATCH"
+
+      - name: Build application, softdevice image, full image and OTA zip
+        working-directory: build-nrf52
+        run: |
+          make -j"$(nproc)" app ${{ steps.version.outputs.args }}
+          make sd ${{ steps.version.outputs.args }}
+          make full ${{ steps.version.outputs.args }} GENERATE_OTA=1 KEY_FILE=../tools/priv.pem
+
+      - name: Flash headroom
+        working-directory: build-nrf52
+        run: |
+          arm-none-eabi-size _build/EPD-nRF52.out
+          text_data=$(arm-none-eabi-size _build/EPD-nRF52.out | awk 'NR==2{print $1+$2}')
+          echo "flash used (text+data): $text_data of 57344 B, $((57344 - text_data)) B free"
+          echo "### Flash: $text_data of 57344 B used, $((57344 - text_data)) B free ($(arm-none-eabi-gcc -dumpversion))" >> "$GITHUB_STEP_SUMMARY"
+          [ "$text_data" -le 57344 ]
+
+      - name: Collect artefacts
+        run: |
+          V=${{ steps.version.outputs.version }}
+          mkdir -p out
+          cp build-nrf52/_build/EPD-nRF52.hex      out/EPD-nRF52-v$V-app.hex
+          cp build-nrf52/_build/EPD-nRF52-sd.hex   out/EPD-nRF52-v$V-sd.hex
+          cp build-nrf52/_build/EPD-nRF52-full.hex out/EPD-nRF52-v$V-full.hex
+          cp build-nrf52/_build/EPD-nRF52-ota.zip  out/EPD-nRF52-v$V-ota.zip
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/
+          if-no-files-found: error
+
+      - name: Firmware_Unified (drive presets)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenDisplay/Firmware_Unified
+          path: unified
+          sparse-checkout: panels/generated
+
+      - name: Host tests, every preset
+        env:
+          OD_UNIFIED: ${{ github.workspace }}/unified
+        run: |
+          keys=$(python3 -c "import json; print(' '.join(json.load(open('unified/panels/generated/drive_presets_nrf52811.json'))['panels']))")
+          for k in $keys; do
+            echo "::group::$k"
+            sh host/tests/run.sh "$k"
+            echo "::endgroup::"
+          done
